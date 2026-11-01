@@ -93,6 +93,7 @@ const TranscriptRecord = Schema.Struct({
   isSidechain: Schema.optional(Schema.Boolean),
   isMeta: Schema.optional(Schema.Boolean),
   isCompactSummary: Schema.optional(Schema.Boolean),
+  origin: Schema.optional(Schema.Struct({ kind: Schema.optional(Schema.String) })),
   message: Schema.optional(TranscriptMessage),
   payload: Schema.optional(
     Schema.Struct({
@@ -270,6 +271,24 @@ function codexTurnId(metadata: unknown): string | null {
 
 function isHiddenClaudeRecord(record: DecodedTranscriptRecord): boolean {
   return record.isSidechain === true || record.isMeta === true || record.isCompactSummary === true;
+}
+
+// Claude also stores harness output as user records. Older records lack
+// `origin`, so known prefixes identify them.
+const CLAUDE_HARNESS_USER_TEXT =
+  /^(?:<(?:task-notification|side-sessions-event|local-command-stdout|local-command-stderr|local-command-caveat)>|\[Request interrupted by user)/;
+const CLAUDE_CONTEXT_PREAMBLE = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>)+/;
+
+function claudeMessageText(record: DecodedTranscriptRecord): string {
+  const text = extractText(record.message?.content);
+  if (record.type !== "user") return text;
+  if (record.origin?.kind !== undefined && record.origin.kind !== "human") return "";
+  const request = text.replace(CLAUDE_CONTEXT_PREAMBLE, "").trim();
+  if (CLAUDE_HARNESS_USER_TEXT.test(request)) return "";
+  if (!/^<command-(?:name|message)>/.test(request)) return request;
+  const command = /<command-name>([\s\S]*?)<\/command-name>/.exec(request)?.[1]?.trim() ?? "";
+  const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(request)?.[1]?.trim() ?? "";
+  return [command, args].filter((part) => part.length > 0).join(" ");
 }
 
 // Claude repeats session fields on records that need not be retained.
@@ -499,7 +518,7 @@ function parseAgentSessionRecords(
     if (input.source === "claudeAgent") {
       if (isHiddenClaudeRecord(record)) continue;
       if (record.type !== "user" && record.type !== "assistant") continue;
-      const text = extractText(record.message?.content);
+      const text = claudeMessageText(record);
       if (text.length === 0) continue;
       retainMessage({
         role: record.type,
@@ -606,12 +625,7 @@ function shouldRetainDecodedRecord(
     if (isHiddenClaudeRecord(record) || (record.type !== "user" && record.type !== "assistant")) {
       return false;
     }
-    const content = record.message?.content;
-    return typeof content === "string"
-      ? content.trim().length > 0
-      : (content?.some(
-          (block) => isTextContentBlock(block) && (block.text?.trim().length ?? 0) > 0,
-        ) ?? false);
+    return claudeMessageText(record).length > 0;
   }
   if (extractDecodedCwd(record) !== null) return true;
   return (

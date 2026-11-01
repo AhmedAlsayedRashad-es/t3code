@@ -1886,12 +1886,52 @@ describe("parseAgentSessionTranscript", () => {
           type: "user",
           sessionId: "claude-session",
           timestamp: "2026-08-24T10:00:00.000Z",
-          message: { role: "user", content: [{ type: "text", text: "Fix authentication" }] },
+          origin: { kind: "human" },
+          message: {
+            role: "user",
+            content: [
+              { type: "text", text: "<system-reminder>\nWorktree path: /repo\n</system-reminder>" },
+              { type: "text", text: "Fix authentication" },
+            ],
+          },
         }),
         JSON.stringify({
           type: "user",
           sessionId: "claude-session",
           message: { role: "user", content: [{ type: "tool_result", text: "hidden" }] },
+        }),
+        JSON.stringify({
+          type: "user",
+          sessionId: "claude-session",
+          origin: { kind: "task-notification" },
+          message: { role: "user", content: "Background task finished" },
+        }),
+        JSON.stringify({
+          type: "user",
+          sessionId: "claude-session",
+          message: { role: "user", content: "<task-notification>\n<task-id>a1</task-id>" },
+        }),
+        JSON.stringify({
+          type: "user",
+          sessionId: "claude-session",
+          message: { role: "user", content: "[Request interrupted by user for tool use]" },
+        }),
+        JSON.stringify({
+          type: "user",
+          sessionId: "claude-session",
+          message: {
+            role: "user",
+            content:
+              "<command-message>review</command-message>\n<command-name>/review</command-name>\n<command-args>the login flow</command-args>",
+          },
+        }),
+        JSON.stringify({
+          type: "user",
+          sessionId: "claude-session",
+          message: {
+            role: "user",
+            content: "<local-command-stdout>Compacted</local-command-stdout>",
+          },
         }),
         JSON.stringify({
           type: "assistant",
@@ -1924,6 +1964,7 @@ describe("parseAgentSessionTranscript", () => {
       model: "claude-sonnet-5",
       messages: [
         { role: "user", text: "Fix authentication" },
+        { role: "user", text: "/review the login flow" },
         { role: "assistant", text: "Updated the login flow" },
         { role: "assistant", text: "The provider request failed" },
       ],
