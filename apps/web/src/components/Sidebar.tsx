@@ -9,6 +9,7 @@ import {
   moveThreadContextDrag as moveThreadContextDragGhost,
 } from "./chat/threadContextDrag";
 import { discardComposerDraft } from "../lib/discardComposerDraft";
+import { importAllAgentSessions } from "../lib/importAllAgentSessions";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
@@ -1080,6 +1081,37 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const shortcutModifiers = useShortcutModifierState();
   const terminalFocused = useTerminalFocus();
   const openAddProjectCommandPalette = () => openCommandPalette({ open: "add-project" });
+  const [importingAgentSessions, setImportingAgentSessions] = useState(false);
+  const handleImportAgentSessions = async () => {
+    const environmentIds = [...serverConfigs.keys()].filter((environmentId) =>
+      readEnvironmentScope(environmentId, AuthOrchestrationOperateScope),
+    );
+    if (environmentIds.length === 0) {
+      toastManager.add({
+        type: "error",
+        title: "Import unavailable",
+        description: "This connection cannot add projects.",
+      });
+      return;
+    }
+    setImportingAgentSessions(true);
+    const result = await importAllAgentSessions(environmentIds).finally(() =>
+      setImportingAgentSessions(false),
+    );
+    // The import count includes threads that earlier imports already added.
+    const threads = `${result.importedThreadCount} ${result.importedThreadCount === 1 ? "thread" : "threads"}`;
+    const projects = `${result.projectCount} ${result.projectCount === 1 ? "project" : "projects"}`;
+    const failures = result.failedProjectCount + result.skippedThreadCount;
+    toastManager.add({
+      type: failures > 0 ? "warning" : "success",
+      title: `Imported ${threads} from ${projects}`,
+      ...(failures > 0
+        ? {
+            description: `${result.failedProjectCount} ${result.failedProjectCount === 1 ? "project" : "projects"} and ${result.skippedThreadCount} ${result.skippedThreadCount === 1 ? "thread" : "threads"} could not be imported.`,
+          }
+        : {}),
+    });
+  };
   const routeThreadRef = resolveActiveThreadRouteRef(routeTarget, routeDraftThread);
   const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
 
@@ -3175,6 +3207,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 </Combobox>
               }
               onNewProject={openAddProjectCommandPalette}
+              onImportAgentSessions={() => void handleImportAgentSessions()}
+              importingAgentSessions={importingAgentSessions}
               onNewThread={handleNewThreadClick}
               newThreadDisabled={projects.length === 0}
               newThreadShortcutLabel={newThreadShortcutLabel}
