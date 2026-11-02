@@ -9,6 +9,7 @@ import {
 
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { RefreshIcon } from "../ui/refresh-icon";
 import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -17,6 +18,8 @@ export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   projectScope: ReactNode;
   onNewProject: () => void;
+  onImportAgentSessions: () => void;
+  importingAgentSessions: boolean;
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
@@ -37,6 +40,8 @@ export function SidebarThreadHeader({
   hasProjects,
   projectScope,
   onNewProject,
+  onImportAgentSessions,
+  importingAgentSessions,
   onNewThread,
   newThreadDisabled,
   newThreadShortcutLabel,
@@ -110,6 +115,13 @@ export function SidebarThreadHeader({
             </SidebarHeaderIconButton>
           </>
         ) : null}
+        <SidebarHeaderIconButton
+          label="Import all projects from Claude Code and Codex"
+          disabled={importingAgentSessions}
+          onClick={onImportAgentSessions}
+        >
+          <RefreshIcon refreshing={importingAgentSessions} />
+        </SidebarHeaderIconButton>
         <SidebarHeaderIconButton
           label="New thread"
           tooltip={
