@@ -57,7 +57,21 @@ describe("live provider-turn usage (#8144)", () => {
       autoCompactThreshold: 150_000,
       updatedAt: "2026-08-27T00:00:00.000Z",
     });
-    const snapshot = deriveLatestContextWindowSnapshot([], usage);
+    const startupContext = {
+      usedTokens: 30_000,
+      maxTokens: 200_000,
+      compactsAutomatically: true,
+      categories: [{ name: "System prompt", tokens: 30_000, kind: "used" as const }],
+      updatedAt: "2026-08-26T00:00:00.000Z",
+    };
+    const providerThread = {
+      contextUsage: { usedTokens: startupContext.usedTokens, maxTokens: startupContext.maxTokens },
+      startupContext,
+      updatedAt: DateTime.makeUnsafe(startupContext.updatedAt),
+    };
+    expect(deriveLatestContextWindowSnapshot([], null, providerThread)?.usedTokens).toBe(30_000);
+    const snapshot = deriveLatestContextWindowSnapshot([], usage, providerThread);
+    expect(snapshot?.startupContext).toEqual(startupContext);
     expect(snapshot).not.toBeNull();
     expect(snapshot?.usedTokens).toBe(42_000);
     expect(snapshot?.maxTokens).toBe(200_000);

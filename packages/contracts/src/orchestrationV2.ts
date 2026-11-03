@@ -1092,6 +1092,21 @@ export const OrchestrationV2ProviderThread = Schema.Struct({
   contextUsage: Schema.optional(Schema.NullOr(ThreadTokenUsageSnapshot)).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  startupContext: Schema.optional(
+    Schema.Struct({
+      usedTokens: NonNegativeInt,
+      maxTokens: PositiveInt,
+      compactsAutomatically: Schema.Boolean,
+      categories: Schema.Array(
+        Schema.Struct({
+          name: TrimmedNonEmptyString,
+          tokens: NonNegativeInt,
+          kind: Schema.Literals(["used", "free", "buffer", "deferred"]),
+        }),
+      ),
+      updatedAt: Schema.String,
+    }),
+  ),
   nativeMetadata: Schema.optional(Schema.NullOr(OrchestrationV2ProviderThreadNativeMetadata)).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),

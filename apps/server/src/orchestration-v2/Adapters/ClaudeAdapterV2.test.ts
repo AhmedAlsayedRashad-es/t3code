@@ -2864,6 +2864,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     });
 
   const makeWakeHarnessWithOptions = (options?: {
+    readonly getStartupContext?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["getStartupContext"];
     readonly close?: (sdkMessages: Queue.Queue<SDKMessage>) => Effect.Effect<void>;
     readonly interrupt?: Effect.Effect<void>;
     readonly setPermissionMode?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["setPermissionMode"];
@@ -3004,6 +3005,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
               processQueues.push(sdkMessages);
               return {
                 messages,
+                ...(options?.getStartupContext === undefined
+                  ? {}
+                  : { getStartupContext: options.getStartupContext }),
                 offer: (message) =>
                   Effect.sync(() => {
                     offeredMessages.push(message);
@@ -3119,6 +3123,101 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       };
     });
   const makeWakeHarness = makeWakeHarnessWithOptions();
+
+  it.effect("measures startup context before the first prompt and keeps it on later turns", () =>
+    Effect.gen(function* () {
+      let requests = 0;
+      const startupContext = {
+        usedTokens: 80_000,
+        maxTokens: 200_000,
+        compactsAutomatically: true,
+        categories: [
+          { name: "System prompt", tokens: 20_000, kind: "used" as const },
+          { name: "MCP tools", tokens: 60_000, kind: "used" as const },
+          { name: "Free space", tokens: 120_000, kind: "free" as const },
+        ],
+        updatedAt: "2026-11-03T00:00:00.000Z",
+      };
+      const harness = yield* makeWakeHarnessWithOptions({
+        getStartupContext: Effect.sync(() => {
+          requests++;
+          assert.equal(harness.offeredMessages.length, 0);
+          return startupContext;
+        }),
+      });
+      for (const ordinal of [1, 2]) {
+        yield* harness.runtime.startTurn({
+          ...makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make(`attempt-startup-${ordinal}`),
+            text: "Hello",
+            attachments: [],
+          }),
+          providerTurnOrdinal: ordinal,
+        });
+        yield* harness.offerAndWait(
+          makeAssistantTextFrame({
+            uuid: `startup-assistant-${ordinal}`,
+            text: "Hello",
+          }),
+        );
+        yield* harness.offerAndWait(
+          makeResultFrame({ uuid: `startup-result-${ordinal}`, result: "Hello" }),
+        );
+        yield* Queue.take(harness.terminalReceipts);
+      }
+      assert.equal(requests, 1);
+      const updates = harness.events.filter((event) => event.type === "provider_thread.updated");
+      const measuredIndex = updates.findIndex(
+        (event) => event.providerThread.startupContext !== undefined,
+      );
+      assert.isAtLeast(measuredIndex, 0);
+      assert.equal(updates[measuredIndex]?.providerThread.contextUsage?.usedTokens, 80_000);
+      for (const event of updates.slice(measuredIndex))
+        assert.deepEqual(event.providerThread.startupContext, startupContext);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect.each(["resumed", "later-turn", "fork"] as const)(
+    "does not measure startup context for a %s session",
+    (scenario) =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarnessWithOptions({
+          getStartupContext: Effect.die(
+            "Startup context must only be requested for a fresh session",
+          ),
+        });
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread:
+              scenario === "fork"
+                ? {
+                    ...harness.providerThread,
+                    forkedFrom: { providerThreadId: harness.providerThread.id },
+                  }
+                : harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make(`attempt-startup-${scenario}`),
+            text: "Hello",
+            attachments: [],
+            providerTurnOrdinal: scenario === "later-turn" ? 2 : 1,
+            nativeThreadHasTurns: scenario === "resumed",
+          }),
+        );
+        assert.equal(harness.offeredMessages.length, 1);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+  );
 
   it.effect.each(["release-after", "cancel-after", "release-before", "resume-pending"] as const)(
     "keeps attachment reservations across compaction: %s boundary",

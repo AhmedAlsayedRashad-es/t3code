@@ -518,6 +518,10 @@ export interface ClaudeAgentSdkQueryOpenInput {
 
 export interface ClaudeAgentSdkQuerySession {
   readonly messages: Stream.Stream<SDKMessage, ClaudeAgentSdkQueryRunnerError>;
+  readonly getStartupContext?: Effect.Effect<
+    NonNullable<OrchestrationV2ProviderThread["startupContext"]>,
+    ClaudeAgentSdkQueryRunnerError
+  >;
   readonly offer: (
     message: SDKUserMessage,
     onQueued?: () => void,
@@ -1127,6 +1131,23 @@ export const layerQueryRunner: Layer.Layer<
           );
 
           return {
+            getStartupContext: Effect.gen(function* () {
+              const usage = yield* Effect.tryPromise({
+                try: () => queryRuntime.getContextUsage({ detail: "full" }),
+                catch: (cause) => queryRunnerError(cause, "getContextUsage"),
+              });
+              return {
+                usedTokens: usage.totalTokens,
+                maxTokens: usage.maxTokens,
+                compactsAutomatically: usage.isAutoCompactEnabled,
+                categories: usage.categories.map(({ name, tokens, kind }) => ({
+                  name,
+                  tokens,
+                  kind,
+                })),
+                updatedAt: DateTime.formatIso(yield* DateTime.now),
+              };
+            }),
             messages: Stream.fromAsyncIterable(claudeQueryMessages(queryRuntime), (cause) =>
               queryRunnerError(cause, "fromAsyncIterable"),
             ).pipe(
@@ -4974,8 +4995,23 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         const runtimeContext = yield* Effect.context<never>();
         const runPromise = Effect.runPromiseWith(runtimeContext);
 
-        const emitProviderEvent = (event: ProviderAdapter.ProviderAdapterV2Event) => {
+        // Streaming deltas share this emitter; avoid a span per update.
+        const emitProviderEvent = Effect.fnUntraced(function* (
+          event: ProviderAdapter.ProviderAdapterV2Event,
+        ) {
           if (event.type === "provider_thread.updated") {
+            const previous = (yield* Ref.get(lastProviderThreadByNativeThread)).get(
+              event.providerThread.nativeThreadRef?.nativeId ?? "",
+            );
+            if (previous?.startupContext !== undefined) {
+              event = {
+                ...event,
+                providerThread: {
+                  ...event.providerThread,
+                  startupContext: previous.startupContext,
+                },
+              };
+            }
             const budget = pdfBudgets.get(event.providerThread.nativeThreadRef?.nativeId ?? "");
             if (budget !== undefined) {
               event = {
@@ -4993,8 +5029,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               };
             }
           }
-          return Queue.offer(events, event).pipe(Effect.asVoid);
-        };
+          yield* Queue.offer(events, event);
+        });
 
         const persistAttachmentBudget = Effect.fnUntraced(function* (nativeThreadId: string) {
           const providerThread = (yield* Ref.get(lastProviderThreadByNativeThread)).get(
@@ -5100,7 +5136,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               return;
             }
             yield* Ref.update(lastProviderThreadByNativeThread, (current) =>
-              new Map(current).set(nativeThreadId, providerThread),
+              new Map(current).set(nativeThreadId, {
+                ...providerThread,
+                startupContext:
+                  providerThread.startupContext ?? current.get(nativeThreadId)?.startupContext,
+              }),
             );
           });
 
@@ -10439,6 +10479,33 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                     Effect.provideService(Path.Path, path),
                   );
             const querySession = yield* openQuery(turnInput, nativeThreadId);
+            if (
+              turnInput.providerTurnOrdinal === 1 &&
+              turnInput.nativeThreadHasTurns !== true &&
+              turnInput.providerThread.forkedFrom === null &&
+              (yield* Ref.get(lastProviderThreadByNativeThread)).get(nativeThreadId)
+                ?.startupContext === undefined &&
+              querySession.query.getStartupContext !== undefined
+            ) {
+              const startupContext = yield* querySession.query.getStartupContext;
+              const providerThread = {
+                ...turnInput.providerThread,
+                startupContext,
+                contextUsage: {
+                  usedTokens: startupContext.usedTokens,
+                  maxTokens:
+                    claudeContextWindow(turnInput.modelSelection) ?? startupContext.maxTokens,
+                  compactsAutomatically: startupContext.compactsAutomatically,
+                },
+                updatedAt: yield* DateTime.now,
+              };
+              yield* rememberProviderThread(providerThread);
+              yield* emitProviderEvent({
+                type: "provider_thread.updated",
+                driver: CLAUDE_PROVIDER,
+                providerThread,
+              });
+            }
             const context: ActiveClaudeTurnContext = {
               input: turnInput,
               queryPolicy: querySession.queryPolicy,

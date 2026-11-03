@@ -18,6 +18,7 @@ type NullableContextWindowUsage = {
 };
 
 export type ContextWindowSnapshot = NullableContextWindowUsage & {
+  readonly startupContext?: OrchestrationV2ProviderThread["startupContext"];
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
@@ -59,7 +60,10 @@ export function deriveLatestContextWindowSnapshot(
     readonly item: ThreadStructureTurnItem;
   }>,
   liveUsage?: OrchestrationV2ProviderTurnTokenUsage | null,
-  providerThread?: Pick<OrchestrationV2ProviderThread, "contextUsage" | "updatedAt"> | null,
+  providerThread?: Pick<
+    OrchestrationV2ProviderThread,
+    "contextUsage" | "updatedAt" | "startupContext"
+  > | null,
 ): ContextWindowSnapshot | null {
   if (liveUsage != null) {
     const usedTokens = Math.max(0, liveUsage.usedTokens);
@@ -70,6 +74,7 @@ export function deriveLatestContextWindowSnapshot(
       maxTokens !== null ? Math.max(0, Math.round(maxTokens - usedTokens)) : null;
     const remainingPercentage = usedPercentage !== null ? Math.max(0, 100 - usedPercentage) : null;
     return {
+      startupContext: providerThread?.startupContext,
       usedTokens,
       totalProcessedTokens: null,
       maxTokens,
@@ -105,6 +110,7 @@ export function deriveLatestContextWindowSnapshot(
     const usedPercentage =
       maxTokens !== null && maxTokens > 0 ? Math.min(100, (usedTokens / maxTokens) * 100) : null;
     return {
+      startupContext: providerThread?.startupContext,
       usedTokens,
       totalProcessedTokens: asFiniteNumber(providerUsage.totalProcessedTokens),
       maxTokens,

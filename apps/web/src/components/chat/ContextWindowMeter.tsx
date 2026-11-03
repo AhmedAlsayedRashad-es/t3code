@@ -136,6 +136,29 @@ export function ContextWindowMeter(props: {
               </span>
             </div>
           ) : null}
+          {usage.startupContext ? (
+            <div className="flex flex-col gap-1 border-t pt-2 text-2xs leading-4">
+              <div className="flex items-center justify-between gap-3 font-medium text-secondary-label">
+                <span>At startup</span>
+                <span className="tabular-nums">
+                  {formatContextWindowTokens(usage.startupContext.usedTokens)} tokens
+                </span>
+              </div>
+              {usage.startupContext.categories
+                .filter((category) => category.kind === "used")
+                .map((category) => (
+                  <div
+                    key={category.name}
+                    className="flex items-center justify-between gap-3 text-secondary-label"
+                  >
+                    <span>{category.name}</span>
+                    <span className="tabular-nums">
+                      {formatContextWindowTokens(category.tokens)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          ) : null}
           {usage.cost != null ? (
             <div className="flex items-center justify-between gap-3 text-2xs leading-4">
               <span className="text-secondary-label">Cost</span>
