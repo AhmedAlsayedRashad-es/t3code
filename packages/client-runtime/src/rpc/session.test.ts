@@ -329,6 +329,7 @@ describe("RpcSessionFactory", () => {
       expect(error).toMatchObject({
         reason: "transport",
         message: "Test environment disconnected.",
+        socketCloseCode: 1012,
       });
       expect(configStreamError).toMatchObject({ _tag: "RpcClientError" });
       yield* Effect.yieldNow;

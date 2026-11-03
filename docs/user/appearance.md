@@ -5,6 +5,10 @@ appearance or stay in light or dark mode. To use different themes for light and 
 the corresponding preview within each theme. Appearance preferences are saved separately on each
 device or browser.
 
+**FirstOption Paintbrush** and **FirstOption Ink** add dark palettes with background artwork.
+Choose them like any other theme; adding them does not change your current selection.
+The artwork is hidden on narrow screens and when using forced colours or printing.
+
 On web and desktop, use **Change theme** in the command palette to select a theme without leaving chat.
 Press **Cmd+Option+A** on macOS or **Ctrl+Alt+A** on Windows/Linux to open the theme picker directly.
 Use **Change appearance** in the command palette to choose System, Light, or Dark independently of

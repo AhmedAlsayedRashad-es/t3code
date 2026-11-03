@@ -39,6 +39,7 @@ import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { TelemetryExportSettings } from "./TelemetryExportSettings";
+import { downloadConnectionHistory } from "../../lib/connectionHistory";
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -911,6 +912,7 @@ function DiagnosticsSettingsBody() {
   if (!canReadDiagnostics) {
     return (
       <SettingsPageContainer>
+        <ConnectionHistoryDownload />
         <p className="text-sm text-muted-foreground">
           {environmentId === null
             ? "Connect an environment to see diagnostics."
@@ -924,6 +926,7 @@ function DiagnosticsSettingsBody() {
 
   return (
     <SettingsPageContainer width="expanded" className="gap-10">
+      <ConnectionHistoryDownload />
       <ResourceTelemetryDiagnostics environmentId={environmentId} />
 
       <SettingsSection
@@ -1329,5 +1332,21 @@ function DiagnosticsSettingsBody() {
       </SettingsSection>
       {exportFormEnvironmentId === environmentId && <TelemetryExportSettings />}
     </SettingsPageContainer>
+  );
+}
+
+function ConnectionHistoryDownload() {
+  return (
+    <SettingsSection title="Connection history">
+      <div className="space-y-3 px-4 py-3">
+        <p className="text-sm text-muted-foreground">
+          The latest 1,000 connection events are saved on this device, including failures, retries,
+          network changes, and recovery. Download them even while disconnected.
+        </p>
+        <Button size="sm" variant="outline" onClick={downloadConnectionHistory}>
+          Download connection log
+        </Button>
+      </div>
+    </SettingsSection>
   );
 }

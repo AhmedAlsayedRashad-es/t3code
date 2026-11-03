@@ -152,6 +152,9 @@ function mapSessionRpcError(
       return new ConnectionTransientErrorClass({
         reason: "transport",
         detail: `${error.message}${isSocketErrorReason(error.reason) ? networkHint : ""}`,
+        ...(isSocketErrorReason(error.reason) && error.reason._tag === "SocketCloseError"
+          ? { socketCloseCode: error.reason.code }
+          : {}),
         ...socketFailureLocation(via),
       });
   }
@@ -190,6 +193,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
     const connected = yield* Deferred.make<void>();
     const disconnected = yield* Deferred.make<never, ConnectionTransientError>();
     const pingTimedOut = yield* Ref.make(false);
+    let socketCloseCode: number | undefined;
     const hooks = RpcClient.ConnectionHooks.of({
       onConnect: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
       onDisconnect: Effect.all([Deferred.isDone(connected), Ref.get(pingTimedOut)]).pipe(
@@ -206,6 +210,8 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
                 : timedOut
                   ? `${connection.label} stopped responding for ${PING_TIMEOUT_SECONDS}s. ${UNRESPONSIVE_HOST_HINT}`
                   : `${connection.label} disconnected.`,
+              ...(socketCloseCode === undefined ? {} : { socketCloseCode }),
+              ...(timedOut ? { failureCause: "timeout" as const } : {}),
               ...socketFailureLocation(via),
             }),
           ),
@@ -220,6 +226,9 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
       const socket = webSocketConstructor(url, options);
       socket.addEventListener("message", () => {
         inboundFrames += 1;
+      });
+      socket.addEventListener("close", (event) => {
+        socketCloseCode = event.code;
       });
       return socket;
     };

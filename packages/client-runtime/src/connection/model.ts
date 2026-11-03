@@ -100,6 +100,7 @@ const ConnectionFailureFields = {
   via: Schema.optionalKey(Schema.Literals(["relay", "direct"])),
   failureCause: Schema.optionalKey(ConnectionFailureCause),
   httpStatus: Schema.optionalKey(Schema.Number),
+  socketCloseCode: Schema.optionalKey(Schema.Number),
 };
 
 export class ConnectionTransientError extends Schema.TaggedError<ConnectionTransientError>()(

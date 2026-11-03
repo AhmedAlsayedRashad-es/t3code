@@ -30,6 +30,7 @@ import * as RpcSession from "../rpc/session.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
+import { ConnectionHistory, connectionHistoryEntry } from "./history.ts";
 import {
   connectionRouteId,
   connectionRouteKind,
@@ -283,6 +284,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   const connectivity = yield* Connectivity.Connectivity;
   const driver = yield* ConnectionDriver.ConnectionDriver;
   const wakeups = yield* ConnectionWakeups.ConnectionWakeups;
+  const history = yield* ConnectionHistory;
   const initialIntent: SupervisorIntent = {
     desired: options?.initiallyDesired ?? false,
     network: yield* connectivity.status,
@@ -414,11 +416,32 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   const setState = Effect.fn("EnvironmentSupervisor.setState")(function* (
     next: SupervisorConnectionState,
   ) {
+    const previous = yield* SubscriptionRef.get(state);
     yield* SubscriptionRef.set(state, next);
+    yield* history.record(
+      connectionHistoryEntry(
+        yield* Clock.currentTimeMillis,
+        target.environmentId,
+        target._tag,
+        previous,
+        next,
+      ),
+    );
   });
 
   const signal = Effect.fn("EnvironmentSupervisor.signal")(function* (next: SupervisorSignal) {
     yield* Queue.offer(signals, next);
+    const current = yield* SubscriptionRef.get(state);
+    yield* history.record(
+      connectionHistoryEntry(
+        yield* Clock.currentTimeMillis,
+        target.environmentId,
+        target._tag,
+        current,
+        current,
+        `signal:${next._tag}${next._tag === "Wakeup" ? `:${next.reason}` : ""}`,
+      ),
+    );
   });
 
   const logManagedRelayAccountChange = Effect.logInfo(
@@ -985,6 +1008,17 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       connectedForMs >= BACKOFF_RESET_AFTER_MS,
     );
     if (outcome._tag === "Failure") {
+      const current = yield* SubscriptionRef.get(state);
+      yield* history.record(
+        connectionHistoryEntry(
+          yield* Clock.currentTimeMillis,
+          target.environmentId,
+          target._tag,
+          current,
+          { ...current, lastFailure: outcome.failure.error },
+          "connection-lost",
+        ),
+      );
       yield* Effect.void.pipe(
         Effect.withSpan("EnvironmentSupervisor.connectionLost", {
           root: true,
