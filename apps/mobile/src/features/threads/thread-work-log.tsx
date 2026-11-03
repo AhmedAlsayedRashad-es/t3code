@@ -10,10 +10,6 @@ import {
 } from "./work-log-layout";
 import { QuestionAnswerHistory } from "./QuestionAnswerHistory";
 import { ThreadCommandOutput, useCommandOutputStreaming } from "./thread-command-output";
-import {
-  getQuestionAnswerPreview,
-  hasQuestionAnswer,
-} from "@t3tools/client-runtime/work-log/user-input";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { type AppSymbolName, SymbolView } from "../../components/ui/AppSymbol";
@@ -933,6 +929,16 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
       : null,
   );
   const failureItem = row.projectedItem.item;
+  if (row.workEntry.questionAnswer) {
+    return (
+      <QuestionAnswerHistory
+        environmentId={props.environmentId}
+        answer={row.workEntry.questionAnswer}
+        questions={failureItem.type === "user_input_request" ? failureItem.questions : []}
+        createdAt={row.createdAt}
+      />
+    );
+  }
   if (failureItem.type === "error" && failureItem.status === "failed") {
     const warning = failureItem.failure.class === "usage_limit";
     const timestamp = new Date(row.createdAt);
@@ -1060,10 +1066,7 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
     );
   const toolPresentation = resolveWorkEntryToolPresentation(row.workEntry);
   const previewText = row.groupStandIn?.label ?? workEntryRowLabel(row.workEntry);
-  const answerPreview = row.workEntry.questionAnswer
-    ? getQuestionAnswerPreview(row.workEntry.questionAnswer)
-    : null;
-  const accessiblePreview = [previewText, answerPreview].filter(Boolean).join(": ");
+  const accessiblePreview = previewText;
   const displayText = row.groupStandIn?.label ?? workEntryRowLabel(row.workEntry, expanded);
   const isSystemNotice = row.projectedItem.item.type === "system_notice";
   const isUsageLimit =
@@ -1151,17 +1154,6 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
               tone={isUsageLimit ? "warning" : iconIsDestructive ? "danger" : "default"}
             >
               {displayText}
-              {answerPreview ? (
-                <Text
-                  className={
-                    !expanded &&
-                    row.workEntry.questionAnswer &&
-                    hasQuestionAnswer(row.workEntry.questionAnswer)
-                      ? "text-foreground"
-                      : "text-foreground-subtle"
-                  }
-                >{`  ${answerPreview}`}</Text>
-              ) : null}
             </WorkLogLabel>
           </>
         )}
@@ -1205,20 +1197,13 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
         call ||
         fetchedOutput ||
         viewedImagePath ||
-        outputImages.length > 0 ||
-        row.workEntry.questionAnswer) ? (
+        outputImages.length > 0) ? (
         <Animated.View
           entering={WORK_LOG_DETAIL_ENTER_TRANSITION}
           exiting={WORK_LOG_DETAIL_EXIT_TRANSITION}
           layout={WORK_LOG_LAYOUT_TRANSITION}
           className={reasoning ? "ml-7 py-1" : "pb-1 pt-0.5"}
         >
-          {row.workEntry.questionAnswer ? (
-            <QuestionAnswerHistory
-              environmentId={props.environmentId}
-              answer={row.workEntry.questionAnswer}
-            />
-          ) : null}
           {viewedImagePath ? (
             <View className="pb-1.5">
               {props.renderImage({ href: viewedImagePath, alt: null, title: null })}
