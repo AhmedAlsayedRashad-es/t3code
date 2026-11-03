@@ -37,6 +37,7 @@ import * as RpcSession from "../rpc/session.ts";
 import { presentConnectionState } from "./presentation.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
+import { ConnectionHistory, type ConnectionHistoryEntry } from "./history.ts";
 import { connectionRouteId, entryWithRoutes, isLearned, mergeLearnedRoutes } from "./routes.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -336,13 +337,26 @@ describe("EnvironmentSupervisor", () => {
 
   it.effect("keeps the latest failure visible throughout the next connection attempt", () =>
     Effect.gen(function* () {
+      const entries = yield* Ref.make<ReadonlyArray<ConnectionHistoryEntry>>([]);
+      const recorded = yield* Deferred.make<void>();
       const harness = yield* makeHarness({
         prepare: (attempt) =>
           attempt === 1 ? Effect.fail(transient("Relay connection timed out.")) : Effect.never,
       });
       const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
         initiallyDesired: true,
-      }).pipe(Effect.provide(harness.dependencies));
+      }).pipe(
+        Effect.provide(harness.dependencies),
+        Effect.provideService(ConnectionHistory, {
+          record: (entry) =>
+            Ref.update(entries, (current) => [...current, entry]).pipe(
+              Effect.andThen(
+                entry.attempt === 2 ? Deferred.succeed(recorded, undefined) : Effect.void,
+              ),
+              Effect.asVoid,
+            ),
+        }),
+      );
 
       yield* awaitState(
         supervisor.state,
@@ -365,6 +379,13 @@ describe("EnvironmentSupervisor", () => {
           message: "Relay connection timed out.",
         },
       });
+      yield* Deferred.await(recorded);
+      expect(yield* Ref.get(entries)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: "backoff", reason: "transport", attempt: 1 }),
+          expect.objectContaining({ phase: "connecting", reason: "transport", attempt: 2 }),
+        ]),
+      );
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
@@ -498,10 +519,25 @@ describe("EnvironmentSupervisor", () => {
 
   it.effect("treats an involuntary session close as transient and reconnects", () =>
     Effect.gen(function* () {
+      const entries = yield* Ref.make<ReadonlyArray<ConnectionHistoryEntry>>([]);
+      const recovered = yield* Deferred.make<void>();
       const harness = yield* makeHarness();
       const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
         initiallyDesired: true,
-      }).pipe(Effect.provide(harness.dependencies));
+      }).pipe(
+        Effect.provide(harness.dependencies),
+        Effect.provideService(ConnectionHistory, {
+          record: (entry) =>
+            Ref.update(entries, (current) => [...current, entry]).pipe(
+              Effect.andThen(
+                entry.phase === "connected" && entry.generation === 2
+                  ? Deferred.succeed(recovered, undefined)
+                  : Effect.void,
+              ),
+              Effect.asVoid,
+            ),
+        }),
+      );
 
       yield* awaitState(supervisor.state, (state) => state.phase === "connected");
       yield* harness.closeLatestSession();
@@ -519,6 +555,18 @@ describe("EnvironmentSupervisor", () => {
 
       expect(yield* Ref.get(harness.sessionCount)).toBe(2);
       expect(Option.isSome(yield* SubscriptionRef.get(supervisor.prepared))).toBe(true);
+      yield* Deferred.await(recovered);
+      expect(yield* Ref.get(entries)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ event: "connection-lost", reason: "transport", generation: 1 }),
+          expect.objectContaining({
+            event: "state",
+            phase: "connected",
+            reason: null,
+            generation: 2,
+          }),
+        ]),
+      );
     }).pipe(Effect.provide(TestClock.layer())),
   );
 

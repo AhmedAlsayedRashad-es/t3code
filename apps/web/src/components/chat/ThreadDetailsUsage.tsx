@@ -20,8 +20,8 @@ import { type ContextWindowSnapshot, formatContextWindowTokens } from "../../lib
 import { cn } from "../../lib/utils";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { formatContextWindowCompactionMessage } from "./ContextWindowMeter.logic";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
+import { Button } from "../ui/button";
 
 const PACE_LABEL: Record<LimitPace, string> = {
   ahead: "Ahead of pace",
@@ -82,7 +82,32 @@ export function ThreadDetailsUsage({
 }
 
 /** The thread's context window. The bar fills as context is used; the tick marks auto-compaction. */
-export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowSnapshot }) {
+export function ThreadDetailsContext({
+  usage,
+  onCompact,
+  compactDisabled,
+  compactDisabledReason,
+}: {
+  readonly usage: ContextWindowSnapshot | null;
+  readonly onCompact: () => void;
+  readonly compactDisabled: boolean;
+  readonly compactDisabledReason: string | null;
+}) {
+  if (usage === null) {
+    return (
+      <ThreadDetailsSection headingId="thread-details-context-heading" title="Context window">
+        <div className="space-y-2 px-2.5">
+          <p className="text-xs text-muted-foreground">Context size has not been reported yet.</p>
+          <Button size="xs" variant="outline" onClick={onCompact} disabled={compactDisabled}>
+            Compact session
+          </Button>
+          {compactDisabled && compactDisabledReason ? (
+            <p className="text-2xs text-muted-foreground">{compactDisabledReason}</p>
+          ) : null}
+        </div>
+      </ThreadDetailsSection>
+    );
+  }
   const maxTokens = usage.maxTokens != null && usage.maxTokens > 0 ? usage.maxTokens : null;
   const used =
     maxTokens !== null && usage.usedPercentage !== null
@@ -95,43 +120,89 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
       : null;
   const usedTokens = formatContextWindowTokens(usage.usedTokens);
   return (
-    <ThreadDetailsSection
-      headingId="thread-details-context-heading"
-      title="Context window"
-      showHeading={false}
-    >
-      <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
-        <UsageRow
-          label="Context"
-          fill={used}
-          tone={used === null ? null : used >= 90 ? "error" : used >= 80 ? "warning" : null}
-          tick={tick}
-          muted
-          value={
-            maxTokens !== null
-              ? `${usedTokens} / ${formatContextWindowTokens(maxTokens)}`
-              : usedTokens
-          }
-          ariaValue={used !== null ? `${used}% used` : `${usedTokens} tokens used`}
-          tooltip={
-            <>
-              <span className="text-foreground">
-                {used !== null ? `Context: ${used}% used` : `Context: ${usedTokens} tokens used`}
-              </span>
-              {maxTokens !== null ? (
-                <span className="text-muted-foreground">
-                  {usage.usedTokens.toLocaleString("en-US")} of {maxTokens.toLocaleString("en-US")}{" "}
-                  tokens
-                </span>
-              ) : null}
-              {threshold !== null && threshold > 0 ? (
-                <span className="text-muted-foreground">
-                  {formatContextWindowCompactionMessage(null, threshold)}
-                </span>
-              ) : null}
-            </>
-          }
-        />
+    <ThreadDetailsSection headingId="thread-details-context-heading" title="Context window">
+      <div className="space-y-2 px-2.5 text-xs">
+        <div className="flex justify-between text-muted-foreground">
+          <span>{used === null ? "Tokens used" : `${used}% used`}</span>
+          <span className="tabular-nums">
+            {usedTokens}
+            {maxTokens ? ` / ${formatContextWindowTokens(maxTokens)}` : ""}
+          </span>
+        </div>
+        {used !== null ? (
+          <div
+            className="relative h-1.5 overflow-hidden rounded-full bg-muted-foreground/20"
+            role="progressbar"
+            aria-label="Context window usage"
+            aria-valuenow={used}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className={cn("h-full rounded-full", used >= 90 ? "bg-error" : "bg-info")}
+              style={{ width: `${used}%` }}
+            />
+            {tick !== null ? (
+              <span
+                className="absolute inset-y-0 w-px bg-foreground"
+                style={{ left: `${tick}%` }}
+              />
+            ) : null}
+          </div>
+        ) : null}
+        {(
+          [
+            ["Input", usage.inputTokens, "bg-info", false],
+            ["Cached input (included)", usage.cachedInputTokens, "bg-success", true],
+            ["Output", usage.outputTokens, "bg-warning", false],
+            ["Reasoning (included)", usage.reasoningOutputTokens, "bg-primary", true],
+            ["Free space", usage.remainingTokens, "bg-muted-foreground/40", false],
+          ] as const
+        ).map(([label, tokens, color, subset]) => (
+          <div
+            key={label}
+            className="grid grid-cols-[minmax(0,1fr)_auto_3rem] items-center gap-2 text-muted-foreground"
+          >
+            <span className={cn("flex items-center gap-2", subset && "pl-3")}>
+              <span aria-hidden className={cn("size-2 shrink-0 rounded-xs", color)} />
+              {label}
+            </span>
+            {tokens != null ? (
+              <Tooltip>
+                <TooltipTrigger render={<span className="tabular-nums" />}>
+                  {formatContextWindowTokens(tokens)}
+                </TooltipTrigger>
+                <TooltipPopup side="left">{tokens.toLocaleString("en-US")} tokens</TooltipPopup>
+              </Tooltip>
+            ) : (
+              <span>Not reported</span>
+            )}
+            <span className="text-right tabular-nums">
+              {tokens != null && maxTokens !== null
+                ? `${((tokens / maxTokens) * 100).toFixed(1)}%`
+                : "-"}
+            </span>
+          </div>
+        ))}
+        <p className="text-2xs text-muted-foreground">
+          Latest provider report. Input includes messages, tools, and instructions. Separate sizes
+          for system prompts, skills, and MCP tools are not reported.
+        </p>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-2xs text-muted-foreground">
+            {threshold !== null
+              ? `${formatContextWindowTokens(Math.max(0, threshold - usage.usedTokens))} until auto-compact`
+              : usage.compactsAutomatically
+                ? "Auto-compacts when needed"
+                : ""}
+          </span>
+          <Button size="xs" variant="outline" onClick={onCompact} disabled={compactDisabled}>
+            Compact session
+          </Button>
+        </div>
+        {compactDisabled && compactDisabledReason ? (
+          <p className="text-2xs text-muted-foreground">{compactDisabledReason}</p>
+        ) : null}
       </div>
     </ThreadDetailsSection>
   );

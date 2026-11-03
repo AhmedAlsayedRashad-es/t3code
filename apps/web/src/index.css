@@ -920,6 +920,55 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     --stage-night-sparkle: var(--stage-night-line);
   }
 
+  /* FirstOption art (ported from iso19650-platform fo-scan.css). The images carry their own
+     alpha, so they layer straight over the theme colours. */
+  html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) {
+    --fo-header-scan: url("/themes/firstoption/pc-header-dark.webp");
+    --fo-header-ink: url("/themes/firstoption/ink-band-dark.webp");
+    --fo-header-tint: linear-gradient(100deg, #15283a 0%, #182c42 45%, #1d2a44 75%, #23283f 100%);
+    --fo-panel-scan: url("/themes/firstoption/panel-site-dark.webp");
+    --fo-panel-tint: linear-gradient(
+      180deg,
+      rgb(20 36 48 / 0) 0%,
+      rgb(63 143 140 / 0.07) 45%,
+      rgb(62 95 157 / 0.1) 75%,
+      rgb(125 90 140 / 0.08) 100%
+    );
+  }
+
+  html[data-theme-id="fo-paint"] {
+    --fo-canvas-art:
+      url("/themes/firstoption/paint-canvas-dark.webp") center / cover no-repeat,
+      url("/themes/firstoption/paint-canvas-dark.webp") center / cover no-repeat,
+      url("/themes/firstoption/paint-card-indigo-dark.webp") right top / min(34%, 420px) auto
+        no-repeat,
+      url("/themes/firstoption/paint-card-sand-dark.webp") left bottom / min(30%, 360px) auto
+        no-repeat;
+    --fo-panel-art:
+      var(--fo-panel-scan) 70% bottom / 150% auto no-repeat,
+      url("/themes/firstoption/panel-paint-dark.webp") right 58% / 130% auto no-repeat,
+      url("/themes/firstoption/panel-bloom-indigo-dark.webp") 30% 10% / 150% auto no-repeat,
+      url("/themes/firstoption/panel-bloom-teal-dark.webp") 70% 36% / 160% auto no-repeat,
+      var(--fo-panel-tint);
+  }
+
+  html[data-theme-id="fo-ink"] {
+    --fo-canvas-art:
+      url("/themes/firstoption/ink-band-dark.webp") right bottom / auto 75% no-repeat,
+      url("/themes/firstoption/ink-card-teal-dark.webp") right bottom / min(44%, 560px) auto
+        no-repeat,
+      url("/themes/firstoption/panel-bloom-teal-dark.webp") left 75% / min(60%, 720px) auto
+        no-repeat,
+      url("/themes/firstoption/panel-bloom-indigo-dark.webp") 30% top / min(60%, 720px) auto
+        no-repeat;
+    --fo-panel-art:
+      var(--fo-panel-scan) 70% bottom / 150% auto no-repeat,
+      url("/themes/firstoption/panel-ink-dark.webp") right bottom / 140% auto no-repeat,
+      url("/themes/firstoption/ink-card-teal-dark.webp") left 34% / 110% auto no-repeat,
+      url("/themes/firstoption/panel-bloom-indigo-dark.webp") 30% 10% / 150% auto no-repeat,
+      var(--fo-panel-tint);
+  }
+
   @keyframes settings-search-target-pulse {
     0%,
     100% {
@@ -1467,6 +1516,33 @@ html[data-theme-token-probe] *::after {
 html[data-theme-id] [data-chat-header] {
   background-color: var(--toolbar-background);
   color: var(--contrast-toolbar-foreground);
+}
+
+html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) .fo-theme-canvas {
+  background: var(--fo-canvas-art), var(--background);
+}
+
+html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) [data-sidebar="sidebar"] {
+  background: var(--fo-panel-art), var(--sidebar);
+}
+
+html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) [data-chat-header] {
+  background:
+    var(--fo-header-scan) right bottom / auto 100% no-repeat,
+    var(--fo-header-ink) right bottom / auto 100% no-repeat,
+    var(--fo-header-tint);
+}
+
+@media (forced-colors: active), print, (max-width: 767px) {
+  html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) .fo-theme-canvas {
+    background: var(--background);
+  }
+  html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) [data-sidebar="sidebar"] {
+    background: var(--sidebar);
+  }
+  html:is([data-theme-id="fo-paint"], [data-theme-id="fo-ink"]) [data-chat-header] {
+    background: var(--toolbar-background);
+  }
 }
 
 html[data-theme-id] [data-chat-header] [data-slot="button"],

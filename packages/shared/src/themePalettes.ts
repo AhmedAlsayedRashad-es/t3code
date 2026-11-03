@@ -1,4 +1,12 @@
-export const BUILT_IN_THEME_IDS = ["t3-chat", "grove", "ocean", "ember", "iris"] as const;
+export const BUILT_IN_THEME_IDS = [
+  "t3-chat",
+  "grove",
+  "ocean",
+  "ember",
+  "iris",
+  "fo-paint",
+  "fo-ink",
+] as const;
 
 export const MOBILE_DEFAULT_THEME_ID = "t3-code";
 
@@ -908,12 +916,82 @@ export const IRIS_THEME: ThemeDefinition = {
   sidebarArtwork: true,
 };
 
+const FIRST_OPTION_DARK_COLORS: ThemeColors = {
+  ...T3_CODE_DARK_THEME_COLORS,
+  canvas: "#111e28",
+  chrome: "#142430",
+  toolbar: "#142430",
+  toolbarForeground: "#eff5f8",
+  toolbarBorder: "#2c3e4c",
+  toolbarControl: "#1e2d39",
+  toolbarControlForeground: "#eff5f8",
+  toolbarControlHover: "#253644",
+  surface: "#1e2d39",
+  surfaceRaised: "#253644",
+  surfaceOverlay: "#253644",
+  text: "#eff5f8",
+  textMuted: "#b7c7d3",
+  border: "#2c3e4c",
+  input: "#172632",
+  focus: "#9fb8fa",
+  accent: "#9fb8fa",
+  accentForeground: "#13203a",
+  secondary: "#253644",
+  secondaryForeground: "#eff5f8",
+  muted: "#253644",
+  mutedForeground: "#b7c7d3",
+  placeholder: "#9fb2c0",
+  secondaryLabel: "#9fb2c0",
+  iconMuted: "#9fb2c0",
+  accentSurface: "#263f5c",
+  accentSurfaceForeground: "#eff5f8",
+  messageSurface: "#1e2d39",
+  messageForeground: "#eff5f8",
+  messageAction: "#9fb8fa",
+  messageActionForeground: "#13203a",
+  messageActionHover: "#c3d3fd",
+  codeBackground: "#142430",
+  codeForeground: "#eff5f8",
+  sidebar: "#142430",
+  sidebarForeground: "#eff5f8",
+  sidebarMutedForeground: "#b7c7d3",
+  sidebarControlSurface: "#1e2d39",
+  sidebarRowHover: "#253644",
+  sidebarRowActive: "#263f5c",
+  sidebarRowSelected: "#263f5c",
+  sidebarBorder: "#2c3e4c",
+  terminalBackground: "#111e28",
+  terminalForeground: "#eff5f8",
+};
+
+export const FIRST_OPTION_PAINT_THEME: ThemeDefinition = {
+  id: "fo-paint",
+  label: "FirstOption Paintbrush",
+  appearance: "dark",
+  colors: FIRST_OPTION_DARK_COLORS,
+};
+
+export const FIRST_OPTION_INK_THEME: ThemeDefinition = {
+  id: "fo-ink",
+  label: "FirstOption Ink",
+  appearance: "dark",
+  colors: {
+    ...FIRST_OPTION_DARK_COLORS,
+    accent: "#83d8ca",
+    focus: "#83d8ca",
+    messageAction: "#83d8ca",
+    messageActionHover: "#b1e7de",
+  },
+};
+
 export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
   T3_CHAT_THEME,
   GROVE_THEME,
   OCEAN_THEME,
   EMBER_THEME,
   IRIS_THEME,
+  FIRST_OPTION_PAINT_THEME,
+  FIRST_OPTION_INK_THEME,
 ];
 
 export function getThemeColorsForAppearance(

@@ -2475,9 +2475,15 @@ export default function ChatView(props: ChatViewProps) {
       ? "This connection cannot change threads."
       : !activeProject
         ? "Choose a project before compacting"
-        : !manualCompactionProviderAvailable
-          ? "Compaction is unavailable for this provider"
-          : "Compacting is unavailable right now"
+        : activeEnvironmentUnavailable
+          ? "Reconnect to compact this session."
+          : isWorking
+            ? "Stop or wait for the current turn before compacting."
+            : !activeThreadHasCompactableConversation
+              ? "Send a message before compacting this session."
+              : !manualCompactionProviderAvailable
+                ? "Compaction is unavailable for this provider"
+                : "Compacting is unavailable right now"
     : null;
   const resumeCompactionTokens =
     activeContextWindow &&
@@ -3383,7 +3389,7 @@ export default function ChatView(props: ChatViewProps) {
             />
             <div
               {...conversationArea}
-              className="relative flex min-h-0 flex-1 flex-col bg-background"
+              className="fo-theme-canvas relative flex min-h-0 flex-1 flex-col bg-background"
             >
               <ThreadTimeline
                 pendingApprovals={pendingApprovals}
@@ -3824,6 +3830,9 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadDetailsPanel
+                  onCompact={onCompactContext}
+                  compactDisabled={compactDisabled}
+                  compactDisabledReason={compactDisabledReason}
                   anchor={threadPanelPopoverAnchorRef}
                   handle={threadPanelPopoverHandle}
                   forceNewWorktree={multipleModelSelections !== null}

@@ -31,6 +31,14 @@ but an error message can quote a value the app was handling.
 
 To stop sending them, turn off **Send crash reports** in **Settings > About T3 Code > Diagnostics**.
 
+## Investigate lost connections
+
+In the web or desktop app, open **Settings > Maintenance > Diagnostics** and choose
+**Download connection log**. This device keeps its latest 1,000 connection events,
+including failures, retries, network changes, and recovery, across app restarts.
+The download also works while disconnected. Keep it when reporting an intermittent
+connection problem; timestamps and trace IDs help match it to the host's logs.
+
 ## Export diagnostics to your own receiver
 
 To send traces, metrics, or logs to an OpenTelemetry receiver, open

@@ -244,6 +244,11 @@ Provider commands must start the message to run. T3 Code commands such as
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it, even with the context meter turned off.
 
+The thread details panel shows context usage and the latest input, cached input,
+output, and reasoning token counts reported by the provider. Use **Compact session**
+there to compact without typing a command. Compaction is available while the thread
+is idle. Providers do not report separate sizes for system prompts, skills, or MCP tools.
+
 On web and desktop, turn on **Settings → Labs → Legacy → Context
 window indicator (legacy)** to see context usage. The meter is off by default
 and appears once the provider reports usage. Open it for usage details and
