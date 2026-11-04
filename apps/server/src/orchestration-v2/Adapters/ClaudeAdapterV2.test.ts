@@ -3396,7 +3396,12 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         assert.deepEqual(event.providerThread.startupContext, startupContext);
     }).pipe(
       Effect.provide(
-        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
       ),
     ),
   );
@@ -3431,7 +3436,12 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         assert.equal(harness.offeredMessages.length, 1);
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
         ),
       ),
   );
