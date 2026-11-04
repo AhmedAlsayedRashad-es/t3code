@@ -1192,6 +1192,11 @@ it.effect.each([
     expected: "could not authenticate",
   },
   {
+    name: "SSH host verification",
+    stderr: "Host key verification failed.\r\nfatal: Could not read from remote repository.",
+    expected: "could not verify the remote's SSH host key",
+  },
+  {
     name: "disabled prompts",
     stderr: "fatal: could not read Username: terminal prompts disabled",
     expected: "could not authenticate",
@@ -1243,7 +1248,7 @@ it.effect.each([
   {
     name: "unrelated remote chatter",
     stderr:
-      "remote: Help: authentication failed, connection refused, cannot lock ref\nremote: unrelated service error",
+      "remote: Help: authentication failed, connection refused, cannot lock ref\nremote: Host key verification failed.\nremote: unrelated service error",
     expected: "git fetch origin failed",
   },
   {
