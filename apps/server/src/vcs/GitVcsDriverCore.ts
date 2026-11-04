@@ -583,6 +583,9 @@ function isMissingWorktreeStderr(stderr: string): boolean {
 // Fetch stderr can carry credentials; persist only fixed diagnoses or generic failures.
 function fetchFailureDetail(stderr: string): string | undefined {
   const lines = stderr.split(/\r?\n/).map((line) => line.trim());
+  if (lines.some((line) => /^(?:fatal: )?Host key verification failed\.?$/i.test(line))) {
+    return "Git could not verify the remote's SSH host key. Run git fetch in a terminal in this project's directory on the T3 server, verify the host fingerprint, and update SSH known_hosts if needed. Then retry.";
+  }
   if (
     lines.some((line) =>
       /^(?:fatal: (?:Authentication failed|could not read (?:Username|Password))\b|\S+: Permission denied \(publickey)/i.test(
