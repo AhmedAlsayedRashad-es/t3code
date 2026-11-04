@@ -55,9 +55,15 @@ describe("resolveProjectSettings", () => {
   it("applies overrides per key and reports their source", () => {
     const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       defaultAutoPull: true,
+      worktreesDirectory: "/shared-worktrees",
       sidebarAutoSettleAfterDays: 3,
       projectSettingsOverrides: {
-        [projectId]: { defaultAutoPull: false, sidebarAutoSettleAfterDays: null },
+        [projectId]: {
+          defaultAutoPull: false,
+          sidebarAutoSettleAfterDays: null,
+          worktreesDirectory: "/project/worktrees",
+          worktreesInProject: true,
+        },
       },
     });
     const resolved = resolveProjectSettings(settings, projectId);
@@ -65,6 +71,15 @@ describe("resolveProjectSettings", () => {
     expect(resolved.settings.sidebarAutoSettleAfterDays).toBeNull();
     expect(resolved.settings.defaultThreadEnvMode).toBe(settings.defaultThreadEnvMode);
     expect(resolved.sources.defaultAutoPull).toBe("project");
+    expect(resolved.settings.worktreesDirectory).toBe("/project/worktrees");
+    expect(resolved.sources.worktreesDirectory).toBe("project");
+    expect(resolved.settings.worktreesInProject).toBe(true);
+    expect(resolveProjectSettings(settings, otherProjectId).settings.worktreesInProject).toBe(
+      false,
+    );
+    expect(resolveProjectSettings(settings, otherProjectId).settings.worktreesDirectory).toBe(
+      "/shared-worktrees",
+    );
     expect(resolved.sources.sidebarAutoSettleAfterDays).toBe("project");
     expect(resolved.sources.defaultThreadEnvMode).toBe("environment");
     expect(resolveProjectSettings(settings, otherProjectId).settings.defaultAutoPull).toBe(true);

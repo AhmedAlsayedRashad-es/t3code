@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
@@ -315,6 +316,7 @@ const cleanupFixture = (
     worktreeAfterDays: 8,
     worktreeOnDelete: true,
   },
+  worktreeLocation: "shared" | "project" = "shared",
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -331,7 +333,10 @@ const cleanupFixture = (
     yield* command(repo, ["add", "."]);
     yield* command(repo, ["commit", "-m", "initial"]);
     yield* fs.makeDirectory(config.worktreesDir, { recursive: true });
-    const worktree = `${config.worktreesDir}/feature`;
+    const worktree =
+      worktreeLocation === "project"
+        ? `${repo}/worktrees/feature`
+        : `${config.worktreesDir}/feature`;
     yield* command(repo, ["worktree", "add", "-b", "feature", worktree]);
     let settings: import("@t3tools/contracts").ServerSettings = {
       ...DEFAULT_SERVER_SETTINGS,
@@ -580,7 +585,7 @@ const pausedMeasurementFixture = (storageCleanup?: StorageCleanupSettings) =>
   });
 const cleanupTestLayer = GitVcsDriver.layer.pipe(
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "storage-cleanup-" })),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 const runCleanupTest = <A, E>(
   effect: Effect.Effect<
@@ -1000,16 +1005,24 @@ describe("deleted thread worktrees", () => {
       ...overrides,
     });
 
-  it.effect.each(["no subagents", "native subagent"] as const)(
-    "removes a deleted thread's worktree with %s",
-    (scenario) =>
+  it.effect.each([
+    { scenario: "no subagents", location: "shared" },
+    { scenario: "native subagent", location: "shared" },
+    { scenario: "no subagents", location: "project" },
+    { scenario: "native subagent", location: "project" },
+  ] as const)(
+    "removes a deleted thread's worktree with $scenario ($location)",
+    ({ scenario, location }) =>
       Effect.gen(function* () {
         yield* TestClock.setTime(NOW_MS);
-        const fixture = yield* cleanupFixture({
-          ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-          worktreeAfterDays: null,
-          worktreeOnDelete: true,
-        });
+        const fixture = yield* cleanupFixture(
+          {
+            ...DEFAULT_SERVER_SETTINGS.storageCleanup,
+            worktreeAfterDays: null,
+            worktreeOnDelete: true,
+          },
+          location,
+        );
         const owner = parent(fixture.worktree);
         fixture.setDeletedThreads([owner]);
         fixture.setThreads(scenario === "native subagent" ? [subagent(owner)] : []);
@@ -2098,6 +2111,36 @@ describe("storage cleanup reports and local file policies", () => {
           expect(report.entries[0]?.reason).toContain(
             file === ".env" ? "ignored files (.env)" : "uncommitted changes (1 file)",
           );
+      }),
+    ),
+  );
+  it.live.each([
+    ["unchanged", "removed", "No commits beyond the project branch"],
+    ["unmerged", "kept", "Has commits beyond the project branch"],
+    ["detached", "kept", "Project branch is unavailable"],
+    ["merged-only", "kept", "No remote is configured for merged-worktree cleanup"],
+  ] as const)("cleans archived local-only worktrees: %s", ([state, outcome, reason]) =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        const { service, fs, repo, worktree, command, setThreads } = yield* cleanupFixture({
+          ...DEFAULT_SERVER_SETTINGS.storageCleanup,
+          worktreeUnchanged: state !== "merged-only",
+          worktreeOnMerge: true,
+        });
+        yield* command(repo, ["branch", "-m", "main", "trunk"]);
+        setThreads([shell({ branch: "feature", worktreePath: worktree, archivedAt: at(-DAY_MS) })]);
+        if (state === "unmerged") {
+          yield* fs.writeFileString(`${worktree}/tracked.txt`, "unmerged work\n");
+          yield* command(worktree, ["commit", "-am", "unmerged work"]);
+        }
+        if (state === "detached") yield* command(repo, ["checkout", "--detach"]);
+
+        const report = yield* service.runNow;
+        expect(report.entries[0]).toMatchObject({ outcome, reason });
+        expect(yield* fs.exists(worktree)).toBe(outcome === "kept");
+        expect(
+          (yield* command(repo, ["show-ref", "--verify", "refs/heads/feature"])).stdout,
+        ).not.toBe("");
       }),
     ),
   );

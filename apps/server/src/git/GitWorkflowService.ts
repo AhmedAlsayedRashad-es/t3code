@@ -79,6 +79,7 @@ export class GitWorkflowService extends Context.Service<
       options?: GitVcsDriver.CreateWorktreeOptions,
     ) => Effect.Effect<VcsCreateWorktreeResult, GitCommandError>;
     readonly listLocalBranchNames: (cwd: string) => Effect.Effect<string[], GitCommandError>;
+    readonly listWorktreePaths: (cwd: string) => Effect.Effect<string[], GitCommandError>;
     readonly fetchRemote: (input: {
       readonly cwd: string;
       readonly remoteName: string;
@@ -105,6 +106,7 @@ export class GitWorkflowService extends Context.Service<
     readonly fetchWorktreeBaseCommit: (input: {
       readonly cwd: string;
       readonly refName: string;
+      readonly remote?: GitVcsDriver.GitWorktreeBaseRemote;
     }) => Effect.Effect<
       { readonly commitSha: string; readonly remoteRefName: string } | null,
       GitCommandError
@@ -417,6 +419,11 @@ export const make = Effect.gen(function* () {
     listLocalBranchNames: Effect.fn("GitWorkflowService.listLocalBranchNames")(function (cwd) {
       return ensureGitCommand("GitWorkflowService.listLocalBranchNames", cwd).pipe(
         Effect.andThen(git.listLocalBranchNames(cwd)),
+      );
+    }),
+    listWorktreePaths: Effect.fn("GitWorkflowService.listWorktreePaths")(function (cwd) {
+      return ensureGitCommand("GitWorkflowService.listWorktreePaths", cwd).pipe(
+        Effect.andThen(git.listWorktreePaths(cwd)),
       );
     }),
     fetchRemote: Effect.fn("GitWorkflowService.fetchRemote")(function (input) {

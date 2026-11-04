@@ -62,6 +62,17 @@ back. On mobile, both are in **Settings → Projects → Organize**.
 
 A project on several machines must have every machine connected to pin or archive it.
 
+## Worktree location
+
+In **Settings → Worktrees → Worktree location**, choose **Inside each project** to create new
+worktrees in the primary repository's `worktrees` folder. Threads started from an existing
+worktree still create siblings there. Choose **Custom folder** for another location on that
+environment's machine.
+
+Select a project in the settings filter to give it its own location, or choose **Use environment
+setting** to inherit again. These choices also apply to delegated tasks and PR worktrees. Changing
+the setting affects future worktrees; it does not move existing ones.
+
 ## Worktree branch names
 
 In **Settings → Worktrees → Worktree branch naming**, choose a static prefix,
@@ -206,7 +217,9 @@ captures and log retention remain machine-wide.
 
 Worktrees can be removed after a chosen number of inactive days, after a thread settles, after
 merging, or when they have no commits beyond the default branch. Set settled retention to 0 days
-to remove a worktree at the next cleanup after settlement. Only T3-managed worktrees are eligible.
+to remove a worktree at the next cleanup after settlement. In repositories without remotes,
+unchanged-worktree cleanup compares against the branch checked out in the project workspace;
+if that checkout has a detached HEAD, the worktree is kept. Only T3-managed worktrees are eligible.
 Active sessions and shared worktrees prevent removal. **Keep worktrees with local changes** defaults
 to **Uncommitted changes**, which protects tracked edits and untracked files but deletes ignored
 files such as `.env` and build output. **Any local files** also protects ignored files other than

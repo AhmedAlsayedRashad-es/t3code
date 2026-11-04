@@ -23,6 +23,7 @@ import {
   withIdleCompaction,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { deepMerge } from "./Struct.ts";
 import { fromLenientJson } from "./schemaJson.ts";
@@ -226,6 +227,15 @@ function mergeSettingsEntries<Value>(
   return Object.fromEntries(next);
 }
 
+// Secret persistence keys tokens by trimmed, lowercased host, so merge on the same key.
+const byHost = (tokens: unknown) =>
+  Object.fromEntries(
+    Object.entries(Predicate.isObject(tokens) ? tokens : {}).map(([host, token]) => [
+      host.trim().toLowerCase(),
+      token,
+    ]),
+  );
+
 const knownProjectOverrideKeys = new Set(Object.keys(ProjectSettingsOverrides.fields));
 
 function pickOverrideKeys(entry: ProjectSettingsOverrides | undefined, known: boolean) {
@@ -380,6 +390,16 @@ export function applyServerSettingsPatch(
     projectScriptOverrides: _legacyScripts,
     ...patchForMerge
   } = patch;
+  const previousProjectWorktreesDirectories = new Set(current.previousProjectWorktreesDirectories);
+  for (const [projectId, next] of Object.entries(projectSettingsOverridesPatch ?? {})) {
+    const previous = current.projectSettingsOverrides[projectId as ProjectId]?.worktreesDirectory;
+    if (previous !== undefined && previous !== next?.worktreesDirectory) {
+      previousProjectWorktreesDirectories.add(previous);
+    }
+    if (next?.worktreesDirectory !== undefined) {
+      previousProjectWorktreesDirectories.delete(next.worktreesDirectory);
+    }
+  }
   const currentBackgroundActivity = normalizeServerBackgroundActivitySettings(current);
   const backgroundActivityPatch =
     backgroundActivityProfile !== undefined
@@ -530,16 +550,33 @@ export function applyServerSettingsPatch(
           sourceControlHosts: {
             ...current.sourceControlHosts,
             ...Object.fromEntries(
-              Object.entries(sourceControlHostsPatch).map(([kind, fields]) => [
-                kind,
-                { ...current.sourceControlHosts[kind], ...fields },
-              ]),
+              Object.entries(sourceControlHostsPatch).map(([kind, fields]) => {
+                const saved = current.sourceControlHosts[kind];
+                return [
+                  kind,
+                  {
+                    ...saved,
+                    ...fields,
+                    // Older clients send the whole token map; a host missing from it keeps its saved
+                    // token. An empty map still clears them all.
+                    ...(Predicate.isObject(fields.tokens) && Object.keys(fields.tokens).length > 0
+                      ? {
+                          tokens: {
+                            ...byHost(saved?.tokens),
+                            ...byHost(fields.tokens),
+                          },
+                        }
+                      : {}),
+                  },
+                ];
+              }),
             ),
           },
         }
       : {}),
     ...(projectSettingsOverridesPatch !== undefined
       ? {
+          previousProjectWorktreesDirectories: [...previousProjectWorktreesDirectories],
           projectSettingsOverrides: Object.fromEntries(
             Object.entries(
               mergeProjectSettingsOverridesPatch(
