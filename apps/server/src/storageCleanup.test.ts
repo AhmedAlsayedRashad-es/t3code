@@ -316,6 +316,7 @@ const cleanupFixture = (
     worktreeAfterDays: 8,
     worktreeOnDelete: true,
   },
+  worktreeLocation: "shared" | "project" = "shared",
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -332,7 +333,10 @@ const cleanupFixture = (
     yield* command(repo, ["add", "."]);
     yield* command(repo, ["commit", "-m", "initial"]);
     yield* fs.makeDirectory(config.worktreesDir, { recursive: true });
-    const worktree = `${config.worktreesDir}/feature`;
+    const worktree =
+      worktreeLocation === "project"
+        ? `${repo}/worktrees/feature`
+        : `${config.worktreesDir}/feature`;
     yield* command(repo, ["worktree", "add", "-b", "feature", worktree]);
     let settings: import("@t3tools/contracts").ServerSettings = {
       ...DEFAULT_SERVER_SETTINGS,
@@ -1001,16 +1005,24 @@ describe("deleted thread worktrees", () => {
       ...overrides,
     });
 
-  it.effect.each(["no subagents", "native subagent"] as const)(
-    "removes a deleted thread's worktree with %s",
-    (scenario) =>
+  it.effect.each([
+    { scenario: "no subagents", location: "shared" },
+    { scenario: "native subagent", location: "shared" },
+    { scenario: "no subagents", location: "project" },
+    { scenario: "native subagent", location: "project" },
+  ] as const)(
+    "removes a deleted thread's worktree with $scenario ($location)",
+    ({ scenario, location }) =>
       Effect.gen(function* () {
         yield* TestClock.setTime(NOW_MS);
-        const fixture = yield* cleanupFixture({
-          ...DEFAULT_SERVER_SETTINGS.storageCleanup,
-          worktreeAfterDays: null,
-          worktreeOnDelete: true,
-        });
+        const fixture = yield* cleanupFixture(
+          {
+            ...DEFAULT_SERVER_SETTINGS.storageCleanup,
+            worktreeAfterDays: null,
+            worktreeOnDelete: true,
+          },
+          location,
+        );
         const owner = parent(fixture.worktree);
         fixture.setDeletedThreads([owner]);
         fixture.setThreads(scenario === "native subagent" ? [subagent(owner)] : []);

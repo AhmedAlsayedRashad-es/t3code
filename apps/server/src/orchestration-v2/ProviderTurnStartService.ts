@@ -639,12 +639,18 @@ export const layer: Layer.Layer<
         const exists = yield* fileSystem
           .exists(worktreePath)
           .pipe(Effect.orElseSucceed(() => true));
-        if (!exists && (yield* isManagedWorktreePath(worktreePath))) {
+        if (!exists) {
           const project = yield* projects.getById(projection.thread.projectId).pipe(
             Effect.map(Option.getOrUndefined),
             Effect.orElseSucceed(() => undefined),
           );
-          if (project !== undefined) {
+          const primaryRoot =
+            project !== undefined && path.basename(path.dirname(worktreePath)) === "worktrees"
+              ? (yield* gitWorkflow
+                  .listWorktreePaths(project.workspaceRoot)
+                  .pipe(Effect.orElseSucceed(() => [])))[0]
+              : undefined;
+          if (project !== undefined && (yield* isManagedWorktreePath(worktreePath, primaryRoot))) {
             yield* Effect.logWarning("provider turn start recreating missing worktree", {
               threadId: projection.thread.id,
               worktreePath,

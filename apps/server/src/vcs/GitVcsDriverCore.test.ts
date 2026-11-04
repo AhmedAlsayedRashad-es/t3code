@@ -4790,6 +4790,46 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
         assert.equal(created.worktree.path, expected);
         assert.equal(yield* fileSystem.exists(expected), true);
 
+        const projectDirectory = pathService.join(cwd, "worktrees");
+        const projectWorktree = yield* driver.createWorktree(
+          { cwd, path: null, refName: initialBranch, newRefName: "feature/project-dir" },
+          { worktreeParentDirectory: projectDirectory },
+        );
+        assert.equal(
+          projectWorktree.worktree.path,
+          pathService.join(projectDirectory, "feature-project-dir"),
+        );
+        assert.equal(yield* git(cwd, ["status", "--porcelain"]), "");
+        const sibling = yield* driver.createWorktree(
+          {
+            cwd: projectWorktree.worktree.path,
+            path: null,
+            refName: initialBranch,
+            newRefName: "feature/project-sibling",
+          },
+          { worktreeParentDirectory: projectDirectory },
+        );
+        assert.equal(
+          sibling.worktree.path,
+          pathService.join(projectDirectory, "feature-project-sibling"),
+        );
+        const occupied = pathService.join(projectDirectory, "feature-occupied");
+        yield* fileSystem.makeDirectory(occupied);
+        yield* fileSystem.writeFileString(
+          pathService.join(occupied, "keep.txt"),
+          "existing user file\n",
+        );
+        yield* driver
+          .createWorktree(
+            { cwd, path: null, refName: initialBranch, newRefName: "feature/occupied" },
+            { worktreeParentDirectory: projectDirectory },
+          )
+          .pipe(Effect.flip);
+        assert.include(
+          yield* git(cwd, ["status", "--porcelain", "--untracked-files=all"]),
+          "keep.txt",
+        );
+
         const error = yield* driver
           .createWorktree(
             { cwd, path: null, refName: initialBranch, newRefName: "feature/relative-dir" },

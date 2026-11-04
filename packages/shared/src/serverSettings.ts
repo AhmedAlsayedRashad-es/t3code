@@ -390,6 +390,16 @@ export function applyServerSettingsPatch(
     projectScriptOverrides: _legacyScripts,
     ...patchForMerge
   } = patch;
+  const previousProjectWorktreesDirectories = new Set(current.previousProjectWorktreesDirectories);
+  for (const [projectId, next] of Object.entries(projectSettingsOverridesPatch ?? {})) {
+    const previous = current.projectSettingsOverrides[projectId as ProjectId]?.worktreesDirectory;
+    if (previous !== undefined && previous !== next?.worktreesDirectory) {
+      previousProjectWorktreesDirectories.add(previous);
+    }
+    if (next?.worktreesDirectory !== undefined) {
+      previousProjectWorktreesDirectories.delete(next.worktreesDirectory);
+    }
+  }
   const currentBackgroundActivity = normalizeServerBackgroundActivitySettings(current);
   const backgroundActivityPatch =
     backgroundActivityProfile !== undefined
@@ -566,6 +576,7 @@ export function applyServerSettingsPatch(
       : {}),
     ...(projectSettingsOverridesPatch !== undefined
       ? {
+          previousProjectWorktreesDirectories: [...previousProjectWorktreesDirectories],
           projectSettingsOverrides: Object.fromEntries(
             Object.entries(
               mergeProjectSettingsOverridesPatch(

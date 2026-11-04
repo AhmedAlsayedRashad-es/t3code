@@ -2994,97 +2994,150 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
-  it.effect("prefers a V2-native thread's project settings over an explicit project", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nproject\n");
-      const projectId = ProjectId.make("project:git-settings");
-      const threadId = ThreadId.make("thread:git-settings");
-      const projectModel: ModelSelection = {
-        instanceId: ProviderInstanceId.make("codex"),
-        model: "gpt-project-writer",
-      };
-      const providerInstanceId = ProviderInstanceId.make("codex");
-      const createdAt = DateTime.makeUnsafe("2026-09-27T00:00:00.000Z");
-      let generatedModelSelection:
-        | TextGeneration.CommitMessageGenerationInput["modelSelection"]
-        | undefined;
+  it.effect.each([false, true])(
+    "prefers project settings for native threads and worktrees (inside project: %s)",
+    (insideProject) =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        NodeFS.writeFileSync(NodePath.join(repoDir, "README.md"), "hello\nproject\n");
+        const projectId = ProjectId.make("project:git-settings");
+        const customDirectory = NodePath.join(repoDir, "chosen-worktrees");
+        const threadId = ThreadId.make("thread:git-settings");
+        const projectModel: ModelSelection = {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-project-writer",
+        };
+        const providerInstanceId = ProviderInstanceId.make("codex");
+        const createdAt = DateTime.makeUnsafe("2026-09-27T00:00:00.000Z");
+        let generatedModelSelection:
+          | TextGeneration.CommitMessageGenerationInput["modelSelection"]
+          | undefined;
 
-      const { manager } = yield* makeManager({
-        serverSettings: {
-          projectSettingsOverrides: { [projectId]: { textGenerationModelSelection: projectModel } },
-        },
-        textGeneration: {
-          generateCommitMessage: (input) => {
-            generatedModelSelection = input.modelSelection;
-            return Effect.succeed({ subject: "Use the project writer", body: "" });
+        const { manager } = yield* makeManager({
+          serverSettings: {
+            projectSettingsOverrides: {
+              [projectId]: {
+                textGenerationModelSelection: projectModel,
+                worktreesDirectory: customDirectory,
+                worktreesInProject: insideProject,
+              },
+            },
           },
-        },
-        seed: Effect.gen(function* () {
-          yield* (yield* ProjectStore.ProjectStoreV2).apply({
-            sequence: 1,
-            eventId: EventId.make("event:git-settings:project"),
-            aggregateKind: "project",
-            aggregateId: projectId,
-            occurredAt: DateTime.formatIso(createdAt),
-            commandId: null,
-            causationEventId: null,
-            correlationId: null,
-            metadata: {},
-            type: "project.created",
-            payload: {
-              projectId,
-              title: "Git settings",
-              workspaceRoot: "/elsewhere",
-              defaultModelSelection: null,
-              scripts: [],
-              createdAt: DateTime.formatIso(createdAt),
-              updatedAt: DateTime.formatIso(createdAt),
+          textGeneration: {
+            generateCommitMessage: (input) => {
+              generatedModelSelection = input.modelSelection;
+              return Effect.succeed({ subject: "Use the project writer", body: "" });
             },
-          });
-          yield* (yield* ProjectionStore.ProjectionStoreV2).apply({
-            id: EventId.make("event:git-settings:thread"),
-            type: "thread.created",
-            threadId,
-            providerInstanceId,
-            occurredAt: createdAt,
-            payload: {
-              createdBy: "user",
-              creationSource: "web",
-              id: threadId,
-              projectId,
-              title: "Git settings",
+          },
+          seed: Effect.gen(function* () {
+            yield* (yield* ProjectStore.ProjectStoreV2).apply({
+              sequence: 1,
+              eventId: EventId.make("event:git-settings:project"),
+              aggregateKind: "project",
+              aggregateId: projectId,
+              occurredAt: DateTime.formatIso(createdAt),
+              commandId: null,
+              causationEventId: null,
+              correlationId: null,
+              metadata: {},
+              type: "project.created",
+              payload: {
+                projectId,
+                title: "Git settings",
+                workspaceRoot: repoDir,
+                defaultModelSelection: null,
+                scripts: [],
+                createdAt: DateTime.formatIso(createdAt),
+                updatedAt: DateTime.formatIso(createdAt),
+              },
+            });
+            yield* (yield* ProjectionStore.ProjectionStoreV2).apply({
+              id: EventId.make("event:git-settings:thread"),
+              type: "thread.created",
+              threadId,
               providerInstanceId,
-              modelSelection: { instanceId: providerInstanceId, model: "gpt-5" },
-              runtimeMode: "full-access",
-              interactionMode: "default",
-              branch: null,
-              worktreePath: repoDir,
-              activeProviderThreadId: null,
-              lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
-              forkedFrom: null,
-              createdAt,
-              updatedAt: createdAt,
-              archivedAt: null,
-              settledOverride: null,
-              settledAt: null,
-              lastVisitedAt: null,
-              deletedAt: null,
-            },
+              occurredAt: createdAt,
+              payload: {
+                createdBy: "user",
+                creationSource: "web",
+                id: threadId,
+                projectId,
+                title: "Git settings",
+                providerInstanceId,
+                modelSelection: { instanceId: providerInstanceId, model: "gpt-5" },
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: repoDir,
+                activeProviderThreadId: null,
+                lineage: {
+                  parentThreadId: null,
+                  relationshipToParent: null,
+                  rootThreadId: threadId,
+                },
+                forkedFrom: null,
+                createdAt,
+                updatedAt: createdAt,
+                archivedAt: null,
+                settledOverride: null,
+                settledAt: null,
+                lastVisitedAt: null,
+                deletedAt: null,
+              },
+            });
+          }),
+        });
+
+        yield* manager.runStackedAction({
+          actionId: "test-action-id",
+          cwd: repoDir,
+          action: "commit",
+          threadId,
+          projectId: ProjectId.make("project:other"),
+        });
+
+        expect(generatedModelSelection).toEqual(projectModel);
+        let source = repoDir;
+        for (const ordinal of [1, 2]) {
+          const created = yield* manager.createWorktree({
+            cwd: source,
+            path: null,
+            refName: "HEAD",
+            newRefName: `feature/project-location-${ordinal}`,
           });
-        }),
-      });
+          expect(created.worktree.path).toBe(
+            NodePath.join(
+              insideProject ? NodePath.join(repoDir, "worktrees") : customDirectory,
+              `feature-project-location-${ordinal}`,
+            ),
+          );
+          source = created.worktree.path;
+        }
+      }),
+  );
 
-      yield* manager.runStackedAction({
-        actionId: "test-action-id",
-        cwd: repoDir,
-        action: "commit",
-        threadId,
-        projectId: ProjectId.make("project:other"),
-      });
-
-      expect(generatedModelSelection).toEqual(projectModel);
+  it.effect("rejects project-local placement for a bare repository", () =>
+    Effect.gen(function* () {
+      const source = yield* makeTempDir("t3code-bare-worktree-source-");
+      yield* initRepo(source);
+      const repoDir = yield* makeTempDir("t3code-bare-worktree-location-");
+      yield* runGit(repoDir, ["clone", "--bare", source, "."]);
+      const checkout = yield* makeTempDir("t3code-bare-linked-checkout-");
+      yield* runGit(repoDir, ["--git-dir", repoDir, "worktree", "add", checkout, "main"]);
+      const { manager } = yield* makeManager({ serverSettings: { worktreesInProject: true } });
+      const error = yield* manager
+        .createWorktree({
+          cwd: checkout,
+          refName: "HEAD",
+          newRefName: "feature/project-location",
+          path: null,
+        })
+        .pipe(Effect.flip);
+      expect(error.detail).toContain("no primary checkout");
+      expect(
+        NodeFS.existsSync(NodePath.join(repoDir, "worktrees", "feature-project-location")),
+      ).toBe(false);
     }),
   );
 

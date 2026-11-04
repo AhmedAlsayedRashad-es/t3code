@@ -28,6 +28,7 @@ import {
 } from "./components/SettingsEnvironmentFilterHeader";
 import { BranchNamingSettings } from "./components/BranchNamingSettings";
 import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
+import { WorktreeLocationSettings } from "./components/WorktreeLocationSettings";
 import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -67,6 +68,8 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
   ],
   "source-control": ["defaultAutoPull", "removeAgentCreditsOnMerge"],
   worktrees: [
+    "worktreesDirectory",
+    "worktreesInProject",
     "newWorktreesStartFromOrigin",
     "worktreeSubmodules",
     "branchNamingMode",
@@ -242,7 +245,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       if (queued?.key === targetsKey) write({ ...patch, ...queued.patch });
     });
   };
-  const clearProjectOverrides = () => {
+  const clearProjectSettings = (keys: readonly ProjectScopedServerSettingKey[]) => {
     if (
       writeInFlight.current ||
       !targets.every((target) =>
@@ -250,7 +253,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       )
     )
       return;
-    const writes = planMobileScopedSettingsClear(targets, PAGE_PROJECT_KEYS[props.page]);
+    const writes = planMobileScopedSettingsClear(targets, keys);
     if (writes.length === 0) return;
     writeInFlight.current = true;
     setPendingTargets(targets);
@@ -263,6 +266,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       setPendingWrites((count) => count - 1);
     });
   };
+  const clearProjectOverrides = () => clearProjectSettings(PAGE_PROJECT_KEYS[props.page]);
   const disabled = !canWriteSettings || pendingWrites > 0 || !hasConnectedSelection;
   const managed = (...keys: string[]) => managedSettingReason(targets, ...keys);
   // A locked row keeps its explanation and says who manages it.
@@ -444,6 +448,35 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
 
               {props.page === "worktrees" ? (
                 <>
+                  {targets.length > 0 &&
+                  targets.every(
+                    (target) =>
+                      target.environment.serverConfig.environment.capabilities
+                        .projectWorktreesDirectory === true,
+                  ) ? (
+                    <WorktreeLocationSettings
+                      key={targetsKey}
+                      projectSelected={projectSelected}
+                      inherited={
+                        projectSelected &&
+                        displayTargets.every(
+                          (target) =>
+                            target.sources.worktreesDirectory === "environment" &&
+                            target.sources.worktreesInProject === "environment",
+                        )
+                      }
+                      inProject={uniform("worktreesInProject")}
+                      directory={uniform("worktreesDirectory")}
+                      disabled={
+                        disabledFor("worktreesDirectory") || disabledFor("worktreesInProject")
+                      }
+                      managed={managed("worktreesDirectory", "worktreesInProject")}
+                      onChange={write}
+                      onInherit={() =>
+                        clearProjectSettings(["worktreesDirectory", "worktreesInProject"])
+                      }
+                    />
+                  ) : null}
                   <SettingsSection title="New worktrees">
                     <SettingsSwitchRow
                       icon="arrow.triangle.branch"

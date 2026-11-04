@@ -144,6 +144,8 @@ export interface CreateWorktreeOptions {
   /** Null or omitted defers to the checkout's t3.json. */
   readonly submodules?: WorktreeSubmodules | null;
   readonly worktreesDirectory?: string;
+  /** A project's folder holds branches directly; shared folders add the repository name. */
+  readonly worktreeParentDirectory?: string;
 }
 
 export interface GitCommitProgress {

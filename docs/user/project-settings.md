@@ -62,6 +62,17 @@ back. On mobile, both are in **Settings → Projects → Organize**.
 
 A project on several machines must have every machine connected to pin or archive it.
 
+## Worktree location
+
+In **Settings → Worktrees → Worktree location**, choose **Inside each project** to create new
+worktrees in the primary repository's `worktrees` folder. Threads started from an existing
+worktree still create siblings there. Choose **Custom folder** for another location on that
+environment's machine.
+
+Select a project in the settings filter to give it its own location, or choose **Use environment
+setting** to inherit again. These choices also apply to delegated tasks and PR worktrees. Changing
+the setting affects future worktrees; it does not move existing ones.
+
 ## Worktree branch names
 
 In **Settings → Worktrees → Worktree branch naming**, choose a static prefix,

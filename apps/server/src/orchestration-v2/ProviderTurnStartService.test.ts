@@ -138,7 +138,8 @@ function startWithMissingWorktree(
         Layer.mock(EventSink.EventSinkV2)({ writeIfRunCurrent }),
         IdAllocator.layer,
         Layer.succeed(FileSystem.FileSystem, {
-          exists: () => Effect.succeed(false),
+          exists: (target: string) =>
+            Effect.succeed(normalize(target) === "/tmp/provider-turn-start-project/.git"),
           realPath: (target: string) =>
             normalize(target) in realPaths
               ? Effect.succeed(realPaths[normalize(target)])
@@ -156,6 +157,7 @@ function startWithMissingWorktree(
           pruneWorktrees,
           createWorktree,
           listLocalBranchNames,
+          listWorktreePaths: () => Effect.succeed(["/tmp/provider-turn-start-project"]),
         }),
         Layer.mock(ProjectService.ProjectService)({
           getById: () =>
@@ -217,6 +219,16 @@ it.each([
     label: "<managed>/<repo>/<branch>",
     worktreePath: `${managedWorktreesDir}/project/feature-restore`,
     recreated: true,
+  },
+  {
+    label: "the primary checkout's worktrees folder",
+    worktreePath: "/tmp/provider-turn-start-project/worktrees/feature-restore",
+    recreated: true,
+  },
+  {
+    label: "another repository's worktrees folder",
+    worktreePath: "/tmp/unrelated-project/worktrees/feature-restore",
+    recreated: false,
   },
   {
     label: "the real path of a symlinked managed folder",

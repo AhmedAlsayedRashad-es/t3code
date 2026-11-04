@@ -843,6 +843,21 @@ describe("worktreesDirectory", () => {
     expect(reset.previousWorktreesDirectories).toEqual(["/a", "/b"]);
     const back = applyServerSettingsPatch(reset, { worktreesDirectory: "/a" });
     expect(back.previousWorktreesDirectories).toEqual(["/b"]);
+    const projectId = ProjectId.make("worktree-location-project");
+    const project = applyServerSettingsPatch(back, {
+      projectSettingsOverrides: { [projectId]: { worktreesDirectory: "/project/first" } },
+    });
+    const moved = applyServerSettingsPatch(project, {
+      projectSettingsOverrides: { [projectId]: { worktreesDirectory: "/project/second" } },
+    });
+    expect(moved.previousProjectWorktreesDirectories).toEqual(["/project/first"]);
+    const inherited = applyServerSettingsPatch(moved, {
+      projectSettingsOverrides: { [projectId]: null },
+    });
+    expect(inherited.previousProjectWorktreesDirectories).toEqual([
+      "/project/first",
+      "/project/second",
+    ]);
   });
 });
 

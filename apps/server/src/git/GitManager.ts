@@ -744,25 +744,87 @@ export const make = Effect.gen(function* () {
     }
     return result;
   });
-  const readWorktreesDirectory = serverSettingsService.getSettings.pipe(
-    Effect.map((settings) => settings.worktreesDirectory),
-    Effect.orElseSucceed(() => ""),
-  );
+  const worktreeOptionsFor = Effect.fn("GitManager.worktreeOptionsFor")(function* (input: {
+    readonly cwd: string;
+    readonly path?: string | null | undefined;
+    readonly threadId?: ThreadId | undefined;
+    readonly projectId?: ProjectId | undefined;
+  }) {
+    const readSettings = (cwd: string) =>
+      projectSettingsFor({ ...input, cwd }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new GitCommandError({
+              operation: "GitManager.createWorktree",
+              command: "read project worktree settings",
+              cwd,
+              detail: "Could not load the project's worktree settings.",
+              cause,
+            }),
+        ),
+      );
+    let resolved = yield* readSettings(input.cwd);
+    let primaryRoot: string | undefined;
+    if (resolved.projectId === null && hasProjectSettingsOverrides(resolved.settings)) {
+      primaryRoot = (yield* gitCore.listWorktreePaths(input.cwd))[0];
+      if (primaryRoot !== undefined && primaryRoot !== input.cwd) {
+        resolved = yield* readSettings(primaryRoot);
+      }
+    }
+    const { settings, projectId } = resolved;
+    let parentDirectory =
+      projectId === null
+        ? undefined
+        : settings.projectSettingsOverrides[projectId]?.worktreesDirectory;
+    if (settings.worktreesInProject && input.path == null) {
+      primaryRoot ??= (yield* gitCore.listWorktreePaths(input.cwd))[0];
+      if (primaryRoot === undefined) {
+        return yield* new GitCommandError({
+          operation: "GitManager.createWorktree",
+          command: "git worktree list",
+          cwd: input.cwd,
+          detail: "Cannot find the repository's primary checkout for its worktrees.",
+        });
+      }
+      const primaryCheckout = yield* fileSystem.exists(path.join(primaryRoot, ".git")).pipe(
+        Effect.mapError(
+          (cause) =>
+            new GitCommandError({
+              operation: "GitManager.createWorktree",
+              command: "inspect primary checkout",
+              cwd: input.cwd,
+              detail: "Cannot inspect the repository's primary checkout.",
+              cause,
+            }),
+        ),
+      );
+      if (!primaryCheckout) {
+        return yield* new GitCommandError({
+          operation: "GitManager.createWorktree",
+          command: "inspect primary checkout",
+          cwd: input.cwd,
+          detail:
+            "This repository has no primary checkout. Choose a custom worktree folder instead.",
+        });
+      }
+      parentDirectory = path.join(primaryRoot, "worktrees");
+    }
+    return {
+      worktreesDirectory: settings.worktreesDirectory,
+      ...(parentDirectory === undefined ? {} : { worktreeParentDirectory: parentDirectory }),
+      submodules: settings.worktreeSubmodules,
+    };
+  });
   const createWorktree: GitManager["Service"]["createWorktree"] = Effect.fn(
     "GitManager.createWorktree",
   )(function* (input, options) {
-    const submodules =
-      options?.submodules !== undefined
-        ? options.submodules
-        : yield* projectSettingsFor(input).pipe(
-            Effect.map(({ settings }) => settings.worktreeSubmodules),
-            Effect.orElseSucceed(() => null),
-          );
-    const worktreesDirectory = yield* readWorktreesDirectory;
+    const { worktreeParentDirectory, ...defaults } = yield* worktreeOptionsFor(input);
     const result = yield* gitCore.createWorktree(input, {
-      worktreesDirectory,
+      ...defaults,
+      ...(options?.worktreesDirectory === undefined && worktreeParentDirectory !== undefined
+        ? { worktreeParentDirectory }
+        : {}),
       ...options,
-      submodules,
     });
     if (input.newRefName && input.baseRefName) {
       yield* shareBranchBase(input.cwd, input.newRefName);
@@ -3061,11 +3123,7 @@ export const make = Effect.gen(function* () {
           path: null,
         },
         {
-          worktreesDirectory: yield* readWorktreesDirectory,
-          submodules: yield* projectSettingsFor(input).pipe(
-            Effect.map(({ settings }) => settings.worktreeSubmodules),
-            Effect.orElseSucceed(() => null),
-          ),
+          ...(yield* worktreeOptionsFor(input)),
         },
       );
       yield* ensureExistingWorktreeUpstream(worktree.worktree.path);

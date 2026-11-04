@@ -4196,18 +4196,19 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     const repoName = path.basename(path.resolve(input.cwd));
     let worktreePath = input.path;
     if (worktreePath == null) {
+      const location = options?.worktreeParentDirectory ?? options?.worktreesDirectory ?? "";
       const parentDir = resolveWorktreesDirectory(
-        options?.worktreesDirectory ?? "",
+        location,
         worktreesDir,
         path,
         yield* HostProcess.HomeDirectory,
       );
-      if (parentDir === null) {
+      if (parentDir === null || options?.worktreeParentDirectory === "") {
         return yield* new GitCommandError({
           operation: "GitVcsDriver.createWorktree",
           command: "git worktree add",
           cwd: input.cwd,
-          detail: `The worktree location "${options?.worktreesDirectory}" must be an absolute folder on this machine, not a drive root. Change it in Settings → Worktrees.`,
+          detail: `The worktree location "${location}" must be an absolute folder on this machine, not a drive root. Change it in Settings → Worktrees.`,
         });
       }
       let directoryName = targetBranch.replace(/\//g, "-");
@@ -4218,7 +4219,10 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         const prefix = directoryName.slice(0, 23).replace(/[\uD800-\uDBFF]$/, "");
         directoryName = `${prefix}-${Hex.encode(hash).slice(0, 16)}`;
       }
-      worktreePath = path.join(parentDir, repoName, directoryName);
+      worktreePath =
+        options?.worktreeParentDirectory === undefined
+          ? path.join(parentDir, repoName, directoryName)
+          : path.join(parentDir, directoryName);
     }
     const newRefName = input.newRefName;
     if (newRefName) {
@@ -4281,6 +4285,36 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
 
     if (progress?.onWorktreeClaimed) {
       yield* progress.onWorktreeClaimed(worktreePath);
+    }
+
+    if (input.path == null && options?.worktreeParentDirectory !== undefined) {
+      const primaryRoot = (yield* listWorktreePaths(input.cwd))[0];
+      const relative = primaryRoot === undefined ? "" : path.relative(primaryRoot, worktreePath);
+      if (
+        relative !== "" &&
+        relative !== ".." &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative)
+      ) {
+        const exclude = path.join(yield* resolveGitCommonDir(input.cwd), "info", "exclude");
+        const pattern = `/${relative
+          .split(path.sep)
+          .join("/")
+          .replace(/[\\#!?*[\] ]/g, "\\$&")}/`;
+        yield* fileSystem.makeDirectory(path.dirname(exclude), { recursive: true }).pipe(
+          Effect.andThen(fileSystem.writeFileString(exclude, `\n${pattern}\n`, { flag: "a" })),
+          Effect.mapError(
+            (cause) =>
+              new GitCommandError({
+                operation: "GitVcsDriver.createWorktree",
+                command: "write Git worktree exclusion",
+                cwd: input.cwd,
+                detail: "Could not exclude the new worktree from its parent checkout.",
+                cause,
+              }),
+          ),
+        );
+      }
     }
 
     // worktree add leaves submodules empty, potentially omitting project skills, tools or source.

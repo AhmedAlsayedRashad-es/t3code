@@ -851,8 +851,16 @@ const make = Effect.gen(function* () {
         const realParent = yield* fs.realPath(path.dirname(worktreePath));
         if (realPath !== path.join(realParent, path.basename(worktreePath)))
           return keep("worktree is a symbolic link");
-        if (!roots.some((root) => inside(root, realPath)))
-          return keep("outside the managed worktree folder");
+        if (!roots.some((root) => inside(root, realPath))) {
+          const primaryRoot = (yield* git.listWorktreePaths(project.workspaceRoot))[0];
+          if (
+            primaryRoot === undefined ||
+            !(yield* fs.exists(path.join(primaryRoot, ".git"))) ||
+            pathKey(realParent) !== pathKey(path.join(primaryRoot, "worktrees"))
+          ) {
+            return keep("outside the managed worktree folder");
+          }
+        }
         if (yield* containsProjectRoot(worktreePath, [project, ...snapshot.projects]))
           return keep("contains a project checkout");
         if ((yield* fs.stat(path.join(worktreePath, ".git"))).type !== "File")

@@ -45,17 +45,27 @@ import {
   useClearScopedSettings,
   useScopedSettings,
   useScopedSettingsMixed,
+  useScopedSettingSource,
   useUpdateScopedSettings,
 } from "./useScopedSettings";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
 
 export function WorktreesDirectoryRow() {
-  const { connectedEnvironments, targets } = useSettingsScope();
+  const { connectedEnvironments, targets, scope } = useSettingsScope();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
+  const clearSettings = useClearScopedSettings();
   const mixed = useScopedSettingsMixed(["worktreesDirectory"]);
+  const mixedPlacement = useScopedSettingsMixed(["worktreesInProject"]);
+  const source = useScopedSettingSource(["worktreesDirectory", "worktreesInProject"]);
+  const [customScope, setCustomScope] = useState<string | null>(null);
   const edited = useRef(false);
   const draft = useRef("");
+  const projectScope = scope.kind === "project" || scope.kind === "checkout";
+  const supportsProjectLocation = connectedEnvironments.every(
+    (environment) =>
+      environment.serverConfig?.environment.capabilities.projectWorktreesDirectory === true,
+  );
   if (
     connectedEnvironments.some(
       (environment) =>
@@ -63,47 +73,139 @@ export function WorktreesDirectoryRow() {
     )
   )
     return null;
-  const scopeKey = targets.map((target) => target.environmentId).join(",");
+  if (projectScope && !supportsProjectLocation) return null;
+  const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
+  const inherited = projectScope && source === "environment";
+  const location =
+    customScope === scopeKey
+      ? "custom"
+      : inherited
+        ? "inherit"
+        : mixedPlacement
+          ? null
+          : settings.worktreesInProject
+            ? "project"
+            : mixed
+              ? null
+              : !projectScope && settings.worktreesDirectory === ""
+                ? "default"
+                : "custom";
+  const reset = () => {
+    setCustomScope(null);
+    if (projectScope) clearSettings(["worktreesDirectory", "worktreesInProject"]);
+    else
+      updateSettings({
+        worktreesDirectory: "",
+        ...(supportsProjectLocation ? { worktreesInProject: false } : {}),
+      });
+  };
 
   return (
     <SettingsRow
       {...searchableSetting("storage-worktrees-location")}
       description={
-        "Folder where new worktrees are created, on any drive, such as D:\\worktrees or ~/worktrees. Existing worktrees stay where they are. Leave empty to use the T3 home folder."
+        projectScope
+          ? "Create worktrees in the repository's worktrees folder, choose a folder on this machine, or inherit the environment setting. Existing worktrees stay where they are."
+          : supportsProjectLocation
+            ? "Choose a shared folder or create worktrees inside each repository's worktrees folder. Existing worktrees stay where they are."
+            : "Folder where new worktrees are created on this machine. Leave empty to use the T3 home folder. Existing worktrees stay where they are."
       }
       serverScoped
-      settingKeys={["worktreesDirectory"]}
+      settingKeys={
+        supportsProjectLocation
+          ? ["worktreesDirectory", "worktreesInProject"]
+          : ["worktreesDirectory"]
+      }
       resetAction={
-        mixed || settings.worktreesDirectory !== "" ? (
-          <SettingResetButton
-            label="worktree location"
-            onClick={() => updateSettings({ worktreesDirectory: "" })}
-          />
+        mixed ||
+        settings.worktreesDirectory !== "" ||
+        settings.worktreesInProject ||
+        source !== "environment" ? (
+          <SettingResetButton label="worktree location" onClick={reset} />
         ) : null
       }
       control={
-        <Input
-          key={`${scopeKey}:${mixed}:${settings.worktreesDirectory}`}
-          aria-label="Worktree location"
-          autoCapitalize="none"
-          spellCheck={false}
-          placeholder={mixed ? "Mixed" : "Default"}
-          defaultValue={mixed ? "" : settings.worktreesDirectory}
-          onFocus={(event) => {
-            draft.current = event.target.value;
-          }}
-          onChange={(event) => {
-            edited.current = true;
-            draft.current = resolvePastedPath(draft.current, event.target.value);
-            event.target.value = draft.current;
-          }}
-          onBlur={(event) => {
-            const value = event.target.value.trim();
-            if (edited.current && (mixed || value !== settings.worktreesDirectory))
-              updateSettings({ worktreesDirectory: value });
-            edited.current = false;
-          }}
-        />
+        <div className="flex w-72 max-w-full flex-col gap-2">
+          {supportsProjectLocation ? (
+            <Select
+              value={location}
+              onValueChange={(value) => {
+                if (value === "custom") {
+                  setCustomScope(scopeKey);
+                  if (!mixed && settings.worktreesDirectory !== "") {
+                    updateSettings({
+                      worktreesDirectory: settings.worktreesDirectory,
+                      worktreesInProject: false,
+                    });
+                  }
+                } else if (value === "project") {
+                  setCustomScope(null);
+                  updateSettings({ worktreesInProject: true });
+                } else if (value === "inherit" || value === "default") reset();
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="Worktree placement">
+                <SelectValue>
+                  {location === "inherit"
+                    ? "Use environment setting"
+                    : location === "default"
+                      ? "T3 home folder"
+                      : location === "project"
+                        ? `Inside ${projectScope ? "this project" : "each project"}`
+                        : location === "custom"
+                          ? "Custom folder"
+                          : "Mixed"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem value={projectScope ? "inherit" : "default"}>
+                  {projectScope ? "Use environment setting" : "T3 home folder"}
+                </SelectItem>
+                <SelectItem value="project">
+                  Inside {projectScope ? "this project" : "each project"}
+                </SelectItem>
+                <SelectItem value="custom">Custom folder</SelectItem>
+              </SelectPopup>
+            </Select>
+          ) : null}
+          {!supportsProjectLocation || location === "custom" || location === null ? (
+            <Input
+              key={`${scopeKey}:${mixed}:${settings.worktreesDirectory}`}
+              aria-label="Worktree location"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder={mixed ? "Mixed" : "Default"}
+              defaultValue={mixed ? "" : settings.worktreesDirectory}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              onFocus={(event) => {
+                draft.current = event.target.value;
+              }}
+              onChange={(event) => {
+                edited.current = true;
+                draft.current = resolvePastedPath(draft.current, event.target.value);
+                event.target.value = draft.current;
+              }}
+              onBlur={(event) => {
+                const value = event.target.value.trim();
+                if (
+                  edited.current &&
+                  (mixed || value !== settings.worktreesDirectory || settings.worktreesInProject)
+                ) {
+                  if (projectScope && value === "") reset();
+                  else
+                    updateSettings({
+                      worktreesDirectory: value,
+                      ...(supportsProjectLocation ? { worktreesInProject: false } : {}),
+                    });
+                  setCustomScope(null);
+                }
+                edited.current = false;
+              }}
+            />
+          ) : null}
+        </div>
       }
     />
   );
