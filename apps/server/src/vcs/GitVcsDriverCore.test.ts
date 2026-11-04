@@ -2018,7 +2018,7 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
               operation: "GitVcsDriver.test.sshRefusal",
               cwd,
               args: ["fetch", "origin"],
-              env: { LC_ALL: "C", GIT_SSH_COMMAND: fakeSsh },
+              env: { LC_ALL: "C", GIT_SSH_COMMAND: `"${fakeSsh.replaceAll("\\", "/")}"` },
             })
             .pipe(Effect.flip);
 
